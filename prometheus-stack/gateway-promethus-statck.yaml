@@ -1,0 +1,30 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: prometheus-statck-proxy
+  namespace: default
+spec:
+  ingressClassName: apisix
+  http:
+  - name: prometheus-route
+    match:
+      paths:
+      - /prometheus/*
+    backends:
+    - serviceName: kube-prometheus-stack-prometheus
+      servicePort: 9090
+  # Grafana路由（新增）
+  - name: grafana-route
+    match:
+      paths:
+      - /grafana/*
+    backends:
+    - serviceName: kube-prometheus-stack-grafana
+      servicePort: 80
+  - name: alertmanager-route
+    match:
+      paths:
+      - /alertmanager/*
+    backends:
+    - serviceName: kube-prometheus-stack-alertmanager 
+      servicePort: 9093

@@ -1,0 +1,46 @@
+## 配置 Upstream（后端服务）
+#apiVersion: apisix.apache.org/v2
+#kind: ApisixUpstream
+#metadata:
+#  name: k8s-apiserver
+#  namespace: default
+#spec:
+#  scheme: https
+#  loadbalancer:
+#    type: roundrobin
+#  portLevelSettings:
+#  - port: 443
+#    scheme: https
+#  # 由于 API Server 使用自签名证书，需要跳过验证或配置 CA
+#  # 生产环境建议配置正确的 CA
+#  timeout:
+#    connect: 60s
+#    send: 60s
+#    read: 60s
+#---
+# 配置路由
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: k8s-apiserver-route
+  namespace: default
+spec:
+  http:
+  - name: api-server-proxy
+    match:
+      paths:
+      - /*
+    backends:
+    - serviceName: kubernetes
+      servicePort: 443
+      resolveGranularity: service
+    websocket: true  # 支持 WebSocket（exec、logs -f 等）
+    timeout:
+      connect: 60s
+      send: 60s
+      read: 60s
+    plugins:
+    - name: proxy-rewrite
+      enable: true
+      config:
+        scheme: https

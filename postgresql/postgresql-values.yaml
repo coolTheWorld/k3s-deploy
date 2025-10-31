@@ -1,0 +1,159 @@
+# ============================================
+# 全局配置
+# ============================================
+#global:
+#  postgresql:
+#    auth:
+#      # PostgreSQL 管理员密码（postgres 用户）
+#      postgresPassword: "your-strong-password"
+#      # 自定义用户名
+#      username: "myapp"
+#      # 自定义用户密码
+#      password: "myapp-password"
+#      # 自定义数据库名
+#      database: "myappdb"
+
+# ============================================
+# 镜像配置
+# ============================================
+image:
+#  registry: registry-1.docker.io
+#  repository: bitnami/postgresql
+#  tag: "latest"  # 建议使用具体版本号而不是 latest
+  pullPolicy: IfNotPresent
+
+# ============================================
+# 认证配置
+# ============================================
+auth:
+  # 启用 postgres 管理员用户
+  enablePostgresUser: true
+  # postgres 用户密码
+  postgresPassword: "ss+SGY.4EVER"
+  # 应用用户名
+  username: "suns"
+  # 应用用户密码
+  password: "ss+SGY.4EVER"
+  # 默认创建的数据库名
+  database: "suns"
+#  # 复制用户名（如果使用主从架构）
+#  replicationUsername: "suns"
+#  # 复制用户密码
+#  replicationPassword: "ss+SGY.4EVER"
+
+# ============================================
+# 架构模式
+# ============================================
+# standalone: 单机模式
+# replication: 主从复制模式
+architecture: standalone
+
+# ============================================
+# 主节点配置
+# ============================================
+primary:
+  # 持久化存储配置
+  persistence:
+    enabled: true
+    # 存储类名（留空使用默认 StorageClass）
+    storageClass: ""
+    # 存储大小
+    size: 5Gi
+    # 访问模式
+    accessModes:
+      - ReadWriteOnce
+
+  # 资源限制
+  resources:
+    requests:
+      # CPU 请求
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      # CPU 限制
+      memory: "1Gi"
+      cpu: "1000m"
+
+  service:
+    type: NodePort
+    ports:
+      postgresql: 5432
+    nodePorts:
+      # 指定节点端口（30000-32767），留空则自动分配
+      postgresql: 30432
+
+  # Pod 反亲和性（soft: 尽量不调度到同一节点，hard: 强制不调度到同一节点）
+  podAntiAffinityPreset: soft
+
+  # 网络策略
+  networkPolicy:
+    enabled: false  # 生产环境建议启用
+    allowExternal: true
+
+# ============================================
+# 只读副本配置（仅在 architecture: replication 时生效）
+# ============================================
+#readReplicas:
+#  # 只读副本数量
+#  replicaCount: 1
+#  
+#  persistence:
+#    enabled: true
+#    size: 10Gi
+  
+#  resources:
+#    requests:
+#      memory: "256Mi"
+#      cpu: "250m"
+#    limits:
+#      memory: "1Gi"
+#      cpu: "1000m"
+
+# ============================================
+# 指标监控配置
+# ============================================
+metrics:
+  # 启用 Prometheus 监控
+  enabled: false
+  
+  # ServiceMonitor 配置（需要 Prometheus Operator）
+  serviceMonitor:
+    enabled: false
+    interval: "30s"
+
+# ============================================
+# 备份配置
+# ============================================
+backup:
+  # 启用定时备份
+  enabled: false
+  cronjob:
+    # Cron 表达式，每天凌晨 2 点备份
+    schedule: "0 2 * * *"
+    storage:
+      enabled: true
+      size: 8Gi
+
+# ============================================
+# 服务账户配置
+# ============================================
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false
+
+# ============================================
+# 卷权限配置（某些环境需要）
+# ============================================
+volumePermissions:
+  enabled: false
+
+# ============================================
+# 审计日志配置
+# ============================================
+audit:
+  # 记录客户端主机名
+  logHostname: false
+  # 记录连接操作
+  logConnections: false
+  # 记录断开操作
+  logDisconnections: false

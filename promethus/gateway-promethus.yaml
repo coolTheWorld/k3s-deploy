@@ -1,0 +1,49 @@
+#apiVersion: apisix.apache.org/v2
+#kind: ApisixUpstream
+#metadata:
+#  name: prometheus-upstream
+#  namespace: monitoring
+#spec:
+#  scheme: http
+#  loadbalancer:
+#    type: roundrobin
+#---
+#apiVersion: apisix.apache.org/v2
+#kind: ApisixRoute
+#metadata:
+#  name: prometheus-proxy
+#  namespace: monitoring 
+#spec:
+#  ingressClassName: apisix
+#  http:
+#  - name: prometheus-route
+#    match:
+#      paths:
+#      - /prometheus/*
+#    upstreams:
+#    - name: prometheus-upstream 
+#    backends:
+#    - serviceName: prometheus-server
+#      servicePort: 80
+#    plugins:
+#    - name: proxy-rewrite
+#      enable: true
+#      config:
+#        regex_uri:
+#        - "^/prometheus/(.*)$"  # 匹配 /prometheus/ 后的所有内容
+#        - "/$1"
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: prometheus-proxy
+  namespace: monitoring
+spec:
+  ingressClassName: apisix
+  http:
+  - name: prometheus-route
+    match:
+      paths:
+      - /prometheus/*
+    backends:
+    - serviceName: prometheus-server
+      servicePort: 80

@@ -1,0 +1,185 @@
+# promtail-values-minimal.yaml
+
+# 部署为 DaemonSet
+daemonset:
+  enabled: true
+
+deployment:
+  enabled: false
+
+# 资源配置
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Promtail 配置
+config:
+  # 启用配置
+  enabled: true
+  
+  # 日志级别
+  logLevel: info
+  logFormat: logfmt
+  
+  # 服务端口
+  serverPort: 3101
+  
+  # Loki 客户端配置
+  clients:
+    - url: http://loki-gateway/loki/api/v1/push
+      # 如果需要租户，取消注释：
+      # tenant_id: tenant1
+  
+  # 位置文件配置
+  positions:
+    filename: /run/promtail/positions.yaml
+  
+  # 禁用追踪
+  enableTracing: false
+  
+  # Pipeline 和采集配置
+  snippets:
+    # Pipeline 阶段
+    pipelineStages:
+      - cri: {}
+    
+    # 通用标签配置
+    common:
+      - action: replace
+        source_labels:
+          - __meta_kubernetes_pod_node_name
+        target_label: node_name
+      - action: replace
+        source_labels:
+          - __meta_kubernetes_namespace
+        target_label: namespace
+      - action: replace
+        replacement: $1
+        separator: /
+        source_labels:
+          - namespace
+          - app
+        target_label: job
+      - action: replace
+        source_labels:
+          - __meta_kubernetes_pod_name
+        target_label: pod
+      - action: replace
+        source_labels:
+          - __meta_kubernetes_pod_container_name
+        target_label: container
+      - action: replace
+        replacement: /var/log/pods/*$1/*.log
+        separator: /
+        source_labels:
+          - __meta_kubernetes_pod_uid
+          - __meta_kubernetes_pod_container_name
+        target_label: __path__
+    
+    # 采集配置
+    scrapeConfigs: |
+      # 采集 Kubernetes Pods 日志
+      - job_name: kubernetes-pods
+        pipeline_stages:
+          {{- toYaml .Values.config.snippets.pipelineStages | nindent 4 }}
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          # 提取控制器名称
+          - source_labels:
+              - __meta_kubernetes_pod_controller_name
+            regex: ([0-9a-z-.]+?)(-[0-9a-f]{8,10})?
+            action: replace
+            target_label: __tmp_controller_name
+          
+          # 提取应用名称
+          - source_labels:
+              - __meta_kubernetes_pod_label_app_kubernetes_io_name
+              - __meta_kubernetes_pod_label_app
+              - __tmp_controller_name
+              - __meta_kubernetes_pod_name
+            regex: ^;*([^;]+)(;.*)?$
+            action: replace
+            target_label: app
+          
+          # 提取实例名称
+          - source_labels:
+              - __meta_kubernetes_pod_label_app_kubernetes_io_instance
+              - __meta_kubernetes_pod_label_instance
+            regex: ^;*([^;]+)(;.*)?$
+            action: replace
+            target_label: instance
+          
+          # 提取组件名称
+          - source_labels:
+              - __meta_kubernetes_pod_label_app_kubernetes_io_component
+              - __meta_kubernetes_pod_label_component
+            regex: ^;*([^;]+)(;.*)?$
+            action: replace
+            target_label: component
+          
+          # 应用通用标签
+          {{- toYaml .Values.config.snippets.common | nindent 4 }}
+
+# 容器安全配置
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+  allowPrivilegeEscalation: false
+
+# Pod 安全配置（需要 root 权限读取日志）
+podSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+
+# 挂载卷配置
+defaultVolumes:
+  - name: run
+    hostPath:
+      path: /run/promtail
+  - name: pods
+    hostPath:
+      path: /var/log/pods
+
+defaultVolumeMounts:
+  - name: run
+    mountPath: /run/promtail
+  - name: pods
+    mountPath: /var/log/pods
+    readOnly: true
+
+# 容忍度（允许在所有节点运行）
+tolerations:
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+
+# RBAC 配置
+rbac:
+  create: true
+  pspEnabled: false
+
+# ServiceAccount 配置
+serviceAccount:
+  create: true
+
+# 服务配置
+service:
+  enabled: false
+
+# ServiceMonitor 配置
+serviceMonitor:
+  enabled: false
+
+# 网络策略
+networkPolicy:
+  enabled: false

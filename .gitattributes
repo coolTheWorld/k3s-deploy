@@ -1,0 +1,4 @@
+k3sinstall/k3s filter=lfs diff=lfs merge=lfs -text
+k3sinstall/k3s-airgap-images-amd64.tar.zst filter=lfs diff=lfs merge=lfs -text
+*.tgz filter=lfs diff=lfs merge=lfs -text
+*.tar.gz filter=lfs diff=lfs merge=lfs -text

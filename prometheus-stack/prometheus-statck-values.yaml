@@ -1,0 +1,398 @@
+# kube-prometheus-stack-values.yaml
+# 适用于 K3s 环境的 Prometheus Stack 配置
+
+# ==================== 全局配置 ====================
+nameOverride: ""
+fullnameOverride: ""
+
+# ==================== CRDs ====================
+crds:
+  enabled: true
+
+# ==================== 默认告警规则 ====================
+defaultRules:
+  create: true
+  rules:
+    alertmanager: true
+    etcd: true
+    configReloaders: true
+    general: true
+    k8sContainerCpuUsageSecondsTotal: true
+    k8sContainerMemoryCache: true
+    k8sContainerMemoryRss: true
+    k8sContainerMemorySwap: true
+    k8sContainerResource: true
+    k8sContainerMemoryWorkingSetBytes: true
+    k8sPodOwner: true
+    kubeApiserverAvailability: true
+    kubeApiserverBurnrate: true
+    kubeApiserverHistogram: true
+    kubeApiserverSlos: true
+    kubeControllerManager: true
+    kubelet: true
+    kubeProxy: true
+    kubePrometheusGeneral: true
+    kubePrometheusNodeRecording: true
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: true
+    kubernetesSystem: true
+    kubeSchedulerAlerting: true
+    kubeSchedulerRecording: true
+    kubeStateMetrics: true
+    network: true
+    node: true
+    nodeExporterAlerting: true
+    nodeExporterRecording: true
+    prometheus: true
+    prometheusOperator: true
+    windows: false
+
+# ==================== Alertmanager 配置 ====================
+alertmanager:
+  enabled: true
+  
+  serviceAccount:
+    create: true
+    name: ""
+  
+  service:
+    enabled: true
+    type: ClusterIP
+    port: 9093
+    targetPort: 9093
+  
+  alertmanagerSpec:
+    replicas: 1
+    retention: 24h
+    
+    # 持久化存储配置
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+    
+    # 资源限制
+    resources:
+      limits:
+        cpu: 200m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+    
+    # 安全上下文
+    securityContext:
+      runAsUser: 1000
+      runAsNonRoot: true
+      runAsGroup: 2000
+      fsGroup: 2000
+      seccompProfile:
+        type: RuntimeDefault
+  
+  # Alertmanager 配置
+#  config:
+#    global:
+#      resolve_timeout: 5m
+#    route:
+#      group_by: ['namespace', 'alertname']
+#      group_wait: 30s
+#      group_interval: 5m
+#      repeat_interval: 12h
+#      receiver: 'null'
+#      routes:
+#      - receiver: 'null'
+#        matchers:
+#          - alertname = "Watchdog"
+#    receivers:
+#    - name: 'null'
+#    templates:
+#    - '/etc/alertmanager/config/*.tmpl'
+
+# ==================== Grafana 配置 ====================
+grafana:
+  enabled: true
+  
+  # 默认管理员密码（建议修改）
+  adminUser: admin
+  adminPassword: "ss+SGY.4EVER"
+  
+  # 默认 Dashboard
+  defaultDashboardsEnabled: true
+  defaultDashboardsTimezone: Asia/Shanghai
+  defaultDashboardsEditable: true
+  
+  # 持久化存储（可选，建议生产环境启用）
+  # persistence:
+  #   enabled: true
+  #   type: pvc
+  #   storageClassName: ""
+  #   accessModes:
+  #     - ReadWriteOnce
+  #   size: 10Gi
+  
+  # Sidecar 配置（自动加载 Dashboard 和数据源）
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+    datasources:
+      enabled: true
+      defaultDatasourceEnabled: true
+      isDefaultDatasource: true
+      uid: prometheus
+  
+  # Service 配置
+  service:
+    enabled: true
+    type: ClusterIP
+    port: 80
+  
+  # 资源配置
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  
+  # Ingress 配置（如需要可启用）
+  # ingress:
+  #   enabled: true
+  #   ingressClassName: nginx
+  #   hosts:
+  #     - grafana.yourdomain.com
+  #   paths:
+  #     - /
+  #   pathType: Prefix
+
+# ==================== Kubernetes 组件监控 ====================
+kubernetesServiceMonitors:
+  enabled: true
+
+# K3s 特殊配置：需要调整 job 名称
+kubeControllerManager:
+  enabled: true
+  # K3s 环境需要设置为 k3s-server
+  jobNameOverride: "k3s-server"
+  service:
+    enabled: true
+    port: 10257
+    targetPort: 10257
+  serviceMonitor:
+    enabled: true
+    https: true
+    insecureSkipVerify: true
+
+kubeScheduler:
+  enabled: true
+  # K3s 环境需要设置为 k3s-server
+  jobNameOverride: "k3s-server"
+  service:
+    enabled: true
+    port: 10259
+    targetPort: 10259
+  serviceMonitor:
+    enabled: true
+    https: true
+    insecureSkipVerify: true
+
+kubeProxy:
+  enabled: true
+  # K3s 环境需要设置为 k3s-server
+  jobNameOverride: "k3s-server"
+  service:
+    enabled: true
+    port: 10249
+    targetPort: 10249
+
+kubelet:
+  enabled: true
+  # K3s 环境需要设置为 k3s-server
+  jobNameOverride: "k3s-server"
+  namespace: kube-system
+  serviceMonitor:
+    enabled: true
+    https: true
+    insecureSkipVerify: true
+
+kubeApiServer:
+  enabled: true
+
+kubeEtcd:
+  enabled: true
+  # K3s 使用内嵌 etcd，需要特殊配置
+  service:
+    enabled: true
+    port: 2381
+    targetPort: 2381
+
+coreDns:
+  enabled: true
+
+# ==================== kube-state-metrics ====================
+kube-state-metrics:
+  enabled: true
+  prometheus:
+    monitor:
+      enabled: true
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# ==================== Node Exporter ====================
+nodeExporter:
+  enabled: true
+
+prometheus-node-exporter:
+  prometheus:
+    monitor:
+      enabled: true
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# ==================== Prometheus Operator ====================
+prometheusOperator:
+  enabled: true
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  
+  prometheusConfigReloader:
+    resources:
+      limits:
+        cpu: 200m
+        memory: 100Mi
+      requests:
+        cpu: 100m
+        memory: 50Mi
+
+# ==================== Prometheus ====================
+prometheus:
+  enabled: true
+  
+  serviceAccount:
+    create: true
+    name: ""
+  
+  service:
+    enabled: true
+    type: ClusterIP
+    port: 9090
+    targetPort: 9090
+  
+  # Ingress 配置（如需要可启用）
+  # ingress:
+  #   enabled: true
+  #   ingressClassName: nginx
+  #   hosts:
+  #     - prometheus.yourdomain.com
+  #   paths:
+  #     - /
+  #   pathType: Prefix
+  
+  prometheusSpec:
+    
+    # 副本数
+    replicas: 1
+    
+    # 数据保留时间
+    retention: 1d
+    retentionSize: ""
+    
+    # 采集间隔
+    scrapeInterval: 30s
+    scrapeTimeout: 10s
+    evaluationInterval: 30s
+    
+    # 启用管理 API（可选，用于删除数据等操作）
+    enableAdminAPI: true
+    
+    # 启用生命周期管理 API
+    enableFeatures:
+      - web.enable-lifecycle
+    
+    # 外部 URL（如果通过 Gateway/Ingress 访问需要配置）
+    externalUrl: "http://47.82.7.110:19080/prometheus/"
+    routePrefix: /prometheus/
+    
+    # 持久化存储配置
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+          # storageClassName: ""  # 使用默认 StorageClass
+    
+    # 资源限制
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    
+    # 安全上下文
+    securityContext:
+      runAsUser: 1000
+      runAsNonRoot: true
+      runAsGroup: 2000
+      fsGroup: 2000
+      seccompProfile:
+        type: RuntimeDefault
+    
+    # ServiceMonitor 选择器
+    serviceMonitorSelectorNilUsesHelmValues: true
+    podMonitorSelectorNilUsesHelmValues: true
+    ruleSelectorNilUsesHelmValues: true
+    
+    # WAL 压缩
+    walCompression: true
+    
+    # Pod 反亲和性（避免多副本部署在同一节点）
+    #podAntiAffinity: "soft"
+    #podAntiAffinityTopologyKey: kubernetes.io/hostname
+    
+    # 告警配置（连接到 Alertmanager）
+    # alertingEndpoints 会自动配置为同一个 stack 中的 alertmanager
+    
+    # 远程写入配置（可选，用于长期存储）
+    # remoteWrite:
+    # - url: "http://thanos-receiver:19291/api/v1/receive"
+    #   remoteTimeout: 30s
+    
+    # 远程读取配置（可选）
+    # remoteRead:
+    # - url: "http://thanos-query:9090/api/v1/read"
+    #   remoteTimeout: 30s
+
+# ==================== Thanos Ruler ====================
+# 如果需要使用 Thanos 进行高可用或长期存储，可以启用
+thanosRuler:
+  enabled: false
+
+# ==================== 清理资源名称 ====================
+cleanPrometheusOperatorObjectNames: false

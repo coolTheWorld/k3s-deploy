@@ -1,0 +1,149 @@
+# loki-values-minimal.yaml - SingleBinary 模式（修正版）
+
+# 部署模式：SingleBinary
+deploymentMode: SingleBinary
+
+loki:
+  # 认证配置
+  auth_enabled: false
+  
+  # 通用配置
+  commonConfig:
+    replication_factor: 1
+    path_prefix: /var/loki
+  
+  # Schema 配置
+  schemaConfig:
+    configs:
+      - from: 2024-04-01
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+  
+  # 存储配置 - 使用文件系统
+  storage:
+    type: filesystem
+    # 即使使用 filesystem，也需要定义 bucketNames（用于路径）
+    bucketNames:
+      chunks: chunks
+      ruler: ruler
+      admin: admin
+    filesystem:
+      chunks_directory: /var/loki/chunks
+      rules_directory: /var/loki/rules
+  
+  # 日志保留配置
+  limits_config:
+    retention_period: 12h  # 7天
+    reject_old_samples: true
+    reject_old_samples_max_age: 12h
+    max_cache_freshness_per_query: 10m
+    split_queries_by_interval: 15m
+    query_timeout: 300s
+
+# SingleBinary 配置
+singleBinary:
+  replicas: 1
+  
+  # 资源配置
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  
+  # 持久化存储
+  persistence:
+    enabled: true
+    size: 3Gi
+    storageClass: local-path  # K3s 默认存储类
+    accessModes:
+      - ReadWriteOnce
+
+# 禁用分布式组件
+write:
+  replicas: 0
+
+read:
+  replicas: 0
+
+backend:
+  replicas: 0
+
+ingester:
+  replicas: 0
+
+distributor:
+  replicas: 0
+
+querier:
+  replicas: 0
+
+queryFrontend:
+  replicas: 0
+
+queryScheduler:
+  replicas: 0
+
+indexGateway:
+  replicas: 0
+
+compactor:
+  replicas: 0
+
+# Gateway 配置
+gateway:
+  enabled: true
+  replicas: 1
+  
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  
+  ingress:
+    enabled: false
+
+# 禁用测试和监控组件
+test:
+  enabled: false
+
+lokiCanary:
+  enabled: false
+
+monitoring:
+  serviceMonitor:
+    enabled: true
+  dashboards:
+    enabled: true
+  rules:
+    enabled: true
+  selfMonitoring:
+    enabled: false
+
+# 禁用缓存
+resultsCache:
+  enabled: false
+
+chunksCache:
+  enabled: false
+
+# 禁用 MinIO
+minio:
+  enabled: false
+
+# 禁用 ruler（可选）
+ruler:
+  enabled: false
+
+# 禁用企业版功能
+enterprise:
+  enabled: false

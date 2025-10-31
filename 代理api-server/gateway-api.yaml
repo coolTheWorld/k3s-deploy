@@ -1,0 +1,22 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: external-gateway
+  namespace: kube-system
+spec:
+  gatewayClassName: apisix
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 19080
+    allowedRoutes:
+      namespaces:
+        from: All
+  - name: https
+    protocol: TLS
+    port: 6443
+    tls:
+      mode: Passthrough  # 直接透传 TLS，保持端到端加密
+    allowedRoutes:
+      namespaces:
+        from: All

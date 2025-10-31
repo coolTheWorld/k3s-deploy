@@ -1,0 +1,60 @@
+mirrors:
+  # 声明需要使用 embedded-registry 镜像的仓库
+  docker.io:
+  registry.k8s.io:
+#使用私有仓库（HTTP，无认证）
+#mirrors:
+#  # 配置 Docker Hub 镜像
+#  docker.io:
+#    endpoint:
+#      - "http://127.0.0.1:5000"
+#  
+#  # 如果需要配置其他镜像仓库
+#  "registry.k8s.io":
+#    endpoint:
+#      - "http://127.0.0.1:5000"
+#  
+#  # 通配符配置（可选，作为默认镜像）
+#  "*":
+#    endpoint:
+#      - "http://127.0.0.1:5000"
+
+# 如果需要配置私有仓库认证
+#configs:
+#  "127.0.0.1:5000":
+#    tls:
+#      insecure_skip_verify: true
+
+#使用私有仓库（HTTPS，自签名证书）    
+#mirrors:
+#  "my-registry.local:5000":
+#    endpoint:
+#      - "https://my-registry.local:5000"
+#configs:
+#  "registry.company.com":
+#    auth:
+#      username: "employee"
+#      password: "secret123"
+#使用 mTLS（双向认证）
+#mirrors:
+#  "my-registry.local:5000":
+#    endpoint:
+#      - "https://my-registry.local:5000"
+#configs:
+#  "secure-registry.example.com":
+#    auth:
+#      username: "client"
+#      password: "secret"
+#    tls:
+#      cert_file: "/etc/rancher/k3s/certs/client.crt"   # 客户端证书
+#      key_file: "/etc/rancher/k3s/certs/client.key"    # 客户端私钥
+#      ca_file: "/etc/rancher/k3s/certs/ca.crt"         # CA 证书
+#      insecure_skip_verify: false
+#镜像加速     
+#mirrors:
+#  "docker.io":
+#    endpoint:
+#      - "https://docker.mirrors.ustc.edu.cn"   
+#      - "https://hub-mirror.c.163.com"         
+#      - "https://mirror.ccs.tencentyun.com"    
+#      - "https://registry-1.docker.io"         

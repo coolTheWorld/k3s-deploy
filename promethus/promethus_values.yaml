@@ -1,0 +1,106 @@
+# prometheus-custom-values.yaml
+
+# ==================== 禁用不需要的组件 ====================
+alertmanager:
+  enabled: true
+  
+  # 持久化存储配置
+  persistence:
+    enabled: true
+    size: 2Gi
+    accessModes:
+      - ReadWriteOnce
+  
+  # Pod 安全上下文
+  podSecurityContext:
+    runAsUser: 65534
+    runAsNonRoot: true
+    runAsGroup: 65534
+    fsGroup: 65534
+
+prometheus-pushgateway:
+  enabled: true
+  
+  # Service 注解，用于 Prometheus 自动发现 Pushgateway
+  serviceAnnotations:
+    prometheus.io/probe: pushgateway
+  
+  # 资源配置（可选，根据需要调整）
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# ==================== Prometheus Server 配置 ====================
+server:
+  # 最小资源配置
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1024Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  
+  # 单副本
+  replicaCount: 1
+  
+  # 数据保留时间（降低磁盘占用）
+  retention: "1d"
+  
+  # 持久化存储配置（最小化）
+  persistentVolume:
+    enabled: true
+    size: 5Gi
+    # storageClass: ""  # 使用默认 StorageClass
+  
+  # Service 配置（必须保留，Gateway API 需要）
+  service:
+    enabled: true
+    type: ClusterIP
+    # servicePort 默认是 80，会转发到容器的 9090
+  
+  # 全局配置
+  global:
+    scrape_interval: 1m
+    scrape_timeout: 10s
+    evaluation_interval: 1m
+  prefixURL: /prometheus/
+  baseURL: http://172.20.26.169:19080/prometheus/
+  #启用生命周期管理 API
+  extraFlags:
+    - web.enable-lifecycle
+
+# ==================== Node Exporter 配置 ====================
+prometheus-node-exporter:
+  enabled: true
+  
+  resources:
+    limits:
+      cpu: 100m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 30Mi
+
+# ==================== Kube State Metrics 配置 ====================
+kube-state-metrics:
+  enabled: true
+  
+  resources:
+    limits:
+      cpu: 100m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  
+  # 单副本
+  replicas: 1
+
+# ==================== 保留默认的 scrape 配置 ====================
+# serverFiles 部分保留默认值，包含完整的 Kubernetes 服务发现
+# 如果不需要修改，可以不写这部分

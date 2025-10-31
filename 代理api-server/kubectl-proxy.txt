@@ -1,0 +1,2 @@
+#代理 api-server
+kubectl proxy --port=19443 --address=0.0.0.0 --accept-hosts=47.82.7.110

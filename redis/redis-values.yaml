@@ -1,0 +1,68 @@
+
+# ============ 基础配置 ============
+# 架构模式：standalone 单机模式
+architecture: standalone
+
+# ============ 认证配置 ============
+auth:
+  enabled: true
+  password: "ss+SGY.4EVER"
+
+# ============ Redis配置 ============
+# 加载模块和持久化设置
+commonConfiguration: |-
+  # 加载 RediSearch 和 ReJSON 模块
+  loadmodule /opt/bitnami/redis/lib/redis/modules/redisearch.so
+  loadmodule /opt/bitnami/redis/lib/redis/modules/rejson.so
+  # 启用 AOF 持久化
+  appendonly yes
+  # 禁用 RDB 快照
+  save ""
+
+# ============ Master节点配置 ============
+master:
+  # 禁用危险命令
+  #disableCommands:
+  #  - FLUSHDB
+  #  - FLUSHALL
+  
+  # 持久化存储
+  persistence:
+    enabled: true
+    size: 2Gi
+    # storageClass: ""  # 如需指定存储类，取消注释
+  
+  # 资源配置（nano适合小规模）
+  resourcesPreset: "nano"
+  # 如需自定义资源，使用：
+  # resources:
+  #   requests:
+  #     cpu: 100m
+  #     memory: 256Mi
+  #   limits:
+  #     cpu: 500m
+  #     memory: 512Mi
+  
+  # 服务类型
+  service:
+    type: ClusterIP  # 集群内访问
+    ports:
+      redis: 6379
+
+# ============ 网络策略 ============
+networkPolicy:
+  enabled: false
+  #allowExternal: true  # true=不限制访问源；false=仅允许特定标签Pod访问
+
+# ============ 不需要的功能 ============
+# 从节点（单机模式不需要）
+replica:
+  replicaCount: 0
+
+# 哨兵模式（单机模式不需要）
+sentinel:
+  enabled: false
+
+# 监控（按需启用）
+metrics:
+  enabled: false
