@@ -1,0 +1,114 @@
+# Qdrant 副本数 - 生产环境建议 3 副本
+replicaCount: 1
+
+# 镜像配置
+image:
+  pullPolicy: IfNotPresent
+
+# 服务配置
+service:
+  type: ClusterIP  # 如需外部访问改为 NodePort 或 LoadBalancer
+  ports:
+    - name: http
+      port: 6333
+      targetPort: 6333
+      protocol: TCP
+      checksEnabled: true
+    - name: grpc
+      port: 6334
+      targetPort: 6334
+      protocol: TCP
+      checksEnabled: false
+    - name: p2p
+      port: 6335
+      targetPort: 6335
+      protocol: TCP
+      checksEnabled: false
+
+# Ingress - 如需域名访问可启用
+ingress:
+  enabled: false
+  # ingressClassName: "nginx"
+  # hosts:
+  #   - host: qdrant.yourdomain.com
+  #     paths:
+  #       - path: /
+  #         pathType: Prefix
+  #         servicePort: 6333
+
+# 健康检查
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 1
+  failureThreshold: 6
+
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 3
+
+# 资源限制 - 根据实际负载调整
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "1000m"
+    memory: "4Gi"
+
+# 持久化存储 - 根据数据量调整
+persistence:
+  accessModes: ["ReadWriteOnce"]
+  size: 20Gi
+  # storageClassName: "local-path"  # 使用你的 StorageClass
+
+# 快照存储 - 建议生产环境启用
+#snapshotPersistence:
+#  enabled: true
+#  accessModes: ["ReadWriteOnce"]
+#  size: 20Gi
+  # storageClassName: "local-path"
+
+# 集群配置
+config:
+  cluster:
+    enabled: true
+    p2p:
+      port: 6335
+      enable_tls: false
+    consensus:
+      tick_period_ms: 100
+
+# 亲和性配置 - 多副本时建议启用，避免多个 Pod 调度到同一节点
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - qdrant
+          topologyKey: kubernetes.io/hostname
+
+# Pod 中断预算 - 多副本时建议启用
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: 1
+
+# Prometheus 监控 - 如果部署了 Prometheus 可启用
+metrics:
+  serviceMonitor:
+    enabled: true
+    scrapeInterval: 30s
+    scrapeTimeout: 10s
+
+# API 认证 - 生产环境强烈建议启用
+# apiKey: "your-secret-api-key"  # 或设置为 true 自动生成
+# readOnlyApiKey: "your-readonly-api-key"
