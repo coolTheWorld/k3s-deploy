@@ -6,7 +6,6 @@ from typing import Optional, List
 import asyncio
 from datetime import datetime
 import logging
-from contextlib import asynccontextmanager
 
 from ..agent.agent_core import K3sHealthAgentRAG
 from ..utils.config import settings
@@ -22,16 +21,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+app = FastAPI(title="K3s Health Agent API", version="1.0.0")
+
+# CORS配置
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 包含路由
+app.include_router(health_router)
+app.include_router(knowledge_router)
+
 # 全局Agent实例（启动时初始化）
 agent: Optional[K3sHealthAgentRAG] = None
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
+@app.on_event("startup")
+async def startup_event():
+    """启动时初始化"""
     global agent
     
-    # Startup
     logger.info("Starting K3s Health Agent...")
     
     try:
@@ -49,31 +62,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to start agent: {e}")
         raise
-    
-    yield  # 应用运行期间
-    
-    # Shutdown
-    logger.info("Shutting down K3s Health Agent...")
-
-
-app = FastAPI(
-    title="K3s Health Agent API",
-    version="1.0.0",
-    lifespan=lifespan
-)
-
-# CORS配置
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# 包含路由
-app.include_router(health_router)
-app.include_router(knowledge_router)
 
 
 async def periodic_health_check():

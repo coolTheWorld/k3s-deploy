@@ -1,10 +1,16 @@
 """RAG检索引擎"""
+# from langchain.embeddings import OpenAIEmbeddings
+# from langchain.vectorstores import Qdrant
+# from langchain.text_splitter import RecursiveCharacterTextSplitter
+# from langchain.retrievers import ContextualCompressionRetriever
+# from langchain.retrievers.document_compressors import CohereRerank
+# from langchain.schema import Document
 from typing import List, Dict, Optional
 import logging
 
 from langchain_classic.retrievers import ContextualCompressionRetriever
 from langchain_classic.retrievers.document_compressors import CohereRerank
-from langchain_qdrant import QdrantVectorStore
+from langchain_community.vectorstores import Qdrant
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -24,8 +30,8 @@ class RAGEngine:
         embeddings_config = {
             "api_key": config.get("openai_api_key"),
             "model": config.get("embedding_model", "text-embedding-v1"),
-            "timeout": 5,  # 增加超时时间到30秒
-            "max_retries": 1  # 增加重试次数
+            "timeout": 10,  # 设置超时时间
+            "max_retries": 1  # 减少重试次数
         }
         
         # 检查是否使用阿里云（通过 API key 前缀判断）
@@ -36,17 +42,16 @@ class RAGEngine:
         else:
             # 阿里云 DashScope - 使用正确的模型名称
             embeddings_config["base_url"] = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-            # 阿里云支持的 embedding 模型：text-embedding-v1, text-embedding-v2
-            # 注意：text-embedding-v3 可能不存在，改用 v2
+            # 阿里云支持的 embedding 模型：text-embedding-v1, text-embedding-v2, text-embedding-v3
             embeddings_config["model"] = "text-embedding-v3"
         
         self.embeddings = OpenAIEmbeddings(**embeddings_config)
         
         # 初始化向量数据库
-        self.vector_store = QdrantVectorStore(
+        self.vector_store = Qdrant(
             client=self._init_qdrant_client(),
             collection_name="k3s_knowledge_base",
-            embedding=self.embeddings
+            embeddings=self.embeddings
         )
         
         # 初始化重排序器（可选，提升检索质量）

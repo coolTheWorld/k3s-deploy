@@ -1,10 +1,9 @@
 """AI Agent核心"""
 from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
+from langchain_classic.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage, AIMessage
 from pydantic import SecretStr
-from typing import List
 
 from .tools import K3sTools
 from .prompts import SYSTEM_PROMPT, HEALTH_CHECK_PROMPT, DIAGNOSE_PROMPT, FIX_PROMPT
@@ -52,8 +51,11 @@ class K3sHealthAgentRAG:
         except Exception as e:
             logger.error(f"Failed to initialize knowledge base: {e}")
 
-        # 手动管理聊天历史（替代已弃用的 ConversationBufferMemory）
-        self.chat_history: List = []
+        # 记忆管理（必须在创建Agent之前初始化）
+        self.memory = ConversationBufferMemory(
+            memory_key="chat_history",
+            return_messages=True
+        )
 
         # 创建Agent
         self.agent = self._create_agent()
@@ -82,6 +84,7 @@ class K3sHealthAgentRAG:
             tools=tools,
             verbose=True,
             max_iterations=15,  # 增加迭代次数以支持RAG
+            memory=self.memory,
             handle_parsing_errors=True
         )
 
@@ -109,13 +112,8 @@ class K3sHealthAgentRAG:
 {HEALTH_CHECK_PROMPT}"""
 
             result = await self.agent.ainvoke({
-                "input": full_input,
-                "chat_history": self.chat_history
+                "input": full_input
             })
-
-            # 更新聊天历史
-            self.chat_history.append(HumanMessage(content=full_input))
-            self.chat_history.append(AIMessage(content=result["output"]))
 
             return {
                 "status": "success",
@@ -167,13 +165,8 @@ class K3sHealthAgentRAG:
 {DIAGNOSE_PROMPT.format(issue_description=issue_description)}"""
 
             result = await self.agent.ainvoke({
-                "input": full_input,
-                "chat_history": self.chat_history
+                "input": full_input
             })
-
-            # 更新聊天历史
-            self.chat_history.append(HumanMessage(content=full_input))
-            self.chat_history.append(AIMessage(content=result["output"]))
 
             return {
                 "status": "success",
@@ -230,13 +223,8 @@ class K3sHealthAgentRAG:
 {FIX_PROMPT.format(issue_description=issue.get('description'))}"""
 
             result = await self.agent.ainvoke({
-                "input": full_input,
-                "chat_history": self.chat_history
+                "input": full_input
             })
-
-            # 更新聊天历史
-            self.chat_history.append(HumanMessage(content=full_input))
-            self.chat_history.append(AIMessage(content=result["output"]))
 
             # 自动记录成功的修复到知识库
             if result.get("status") == "success":
