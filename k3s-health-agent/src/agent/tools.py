@@ -1,0 +1,250 @@
+"""K3s工具集"""
+from langchain.tools import tool
+from kubernetes import client, config
+from typing import Optional, List
+import subprocess
+import json
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class K3sTools:
+    """K3s集群操作工具集"""
+    
+    def __init__(self, cluster_config: dict):
+        """初始化K3s工具集"""
+        try:
+            # 加载K8s配置
+            if cluster_config.get("in_cluster"):
+                config.load_incluster_config()
+            else:
+                kubeconfig = cluster_config.get("kubeconfig")
+                if kubeconfig:
+                    config.load_kube_config(config_file=kubeconfig)
+                else:
+                    config.load_kube_config()
+            
+            self.v1 = client.CoreV1Api()
+            self.apps_v1 = client.AppsV1Api()
+            self.metrics_api = client.CustomObjectsApi()
+            
+            logger.info("K3s tools initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize K3s tools: {e}")
+            raise
+    
+    def get_tools(self):
+        """返回所有工具"""
+        return [
+            self.get_cluster_nodes,
+            self.get_pod_status,
+            self.get_pod_logs,
+            self.get_node_metrics,
+            self.get_events,
+            self.restart_pod,
+            self.scale_deployment,
+            self.get_service_status,
+            self.run_kubectl_command
+        ]
+    
+    @tool
+    def get_cluster_nodes(self) -> str:
+        """获取集群所有节点状态，包括节点名称、状态、角色、版本、资源容量等信息"""
+        try:
+            nodes = self.v1.list_node()
+            result = []
+            
+            for node in nodes.items:
+                node_info = {
+                    "name": node.metadata.name,
+                    "status": "Ready" if any(
+                        condition.type == "Ready" and condition.status == "True"
+                        for condition in node.status.conditions
+                    ) else "NotReady",
+                    "roles": node.metadata.labels.get("node-role.kubernetes.io/master", "worker"),
+                    "version": node.status.node_info.kubelet_version,
+                    "cpu": node.status.capacity.get("cpu"),
+                    "memory": node.status.capacity.get("memory"),
+                    "pods": node.status.capacity.get("pods")
+                }
+                result.append(node_info)
+            
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        except Exception as e:
+            return f"获取节点信息失败: {str(e)}"
+    
+    @tool
+    def get_pod_status(self, namespace: str = "default") -> str:
+        """获取指定命名空间的所有Pod状态，包括运行状态、重启次数、资源使用等"""
+        try:
+            pods = self.v1.list_namespaced_pod(namespace)
+            result = []
+            
+            for pod in pods.items:
+                pod_info = {
+                    "name": pod.metadata.name,
+                    "namespace": pod.metadata.namespace,
+                    "status": pod.status.phase,
+                    "restarts": sum(
+                        container.restart_count 
+                        for container in (pod.status.container_statuses or [])
+                    ),
+                    "node": pod.spec.node_name,
+                    "ip": pod.status.pod_ip,
+                    "ready": sum(
+                        1 for container in (pod.status.container_statuses or [])
+                        if container.ready
+                    )
+                }
+                
+                # 检查异常状态
+                if pod.status.container_statuses:
+                    for container in pod.status.container_statuses:
+                        if container.state.waiting:
+                            pod_info["issue"] = container.state.waiting.reason
+                        elif container.state.terminated:
+                            pod_info["issue"] = container.state.terminated.reason
+                
+                result.append(pod_info)
+            
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        except Exception as e:
+            return f"获取Pod状态失败: {str(e)}"
+    
+    @tool
+    def get_pod_logs(self, pod_name: str, namespace: str = "default", 
+                     tail_lines: int = 100) -> str:
+        """获取指定Pod的日志，用于问题诊断和错误分析"""
+        try:
+            logs = self.v1.read_namespaced_pod_log(
+                name=pod_name,
+                namespace=namespace,
+                tail_lines=tail_lines
+            )
+            return logs
+        except Exception as e:
+            return f"获取Pod日志失败: {str(e)}"
+    
+    @tool
+    def get_node_metrics(self) -> str:
+        """获取节点的实时资源使用指标（CPU、内存使用率）"""
+        try:
+            metrics = self.metrics_api.list_cluster_custom_object(
+                group="metrics.k8s.io",
+                version="v1beta1",
+                plural="nodes"
+            )
+            
+            result = []
+            for item in metrics.get("items", []):
+                node_metric = {
+                    "name": item["metadata"]["name"],
+                    "cpu_usage": item["usage"]["cpu"],
+                    "memory_usage": item["usage"]["memory"],
+                    "timestamp": item["timestamp"]
+                }
+                result.append(node_metric)
+            
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        except Exception as e:
+            return f"获取节点指标失败: {str(e)}"
+    
+    @tool
+    def get_events(self, namespace: str = "default", limit: int = 50) -> str:
+        """获取集群事件，包括Warning和Error级别的事件，用于问题追踪"""
+        try:
+            events = self.v1.list_namespaced_event(namespace)
+            result = []
+            
+            for event in events.items[:limit]:
+                event_info = {
+                    "type": event.type,
+                    "reason": event.reason,
+                    "message": event.message,
+                    "object": f"{event.involved_object.kind}/{event.involved_object.name}",
+                    "count": event.count,
+                    "first_time": str(event.first_timestamp),
+                    "last_time": str(event.last_timestamp)
+                }
+                result.append(event_info)
+            
+            # 按时间倒序排序
+            result.sort(key=lambda x: x["last_time"], reverse=True)
+            
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        except Exception as e:
+            return f"获取事件失败: {str(e)}"
+    
+    @tool
+    def restart_pod(self, pod_name: str, namespace: str = "default") -> str:
+        """重启指定的Pod（通过删除Pod让Deployment重建）"""
+        try:
+            self.v1.delete_namespaced_pod(
+                name=pod_name,
+                namespace=namespace,
+                body=client.V1DeleteOptions()
+            )
+            return f"Pod {pod_name} 已成功删除，等待重建"
+        except Exception as e:
+            return f"重启Pod失败: {str(e)}"
+    
+    @tool
+    def scale_deployment(self, deployment_name: str, replicas: int, 
+                         namespace: str = "default") -> str:
+        """调整Deployment的副本数量，用于扩缩容"""
+        try:
+            body = {"spec": {"replicas": replicas}}
+            self.apps_v1.patch_namespaced_deployment_scale(
+                name=deployment_name,
+                namespace=namespace,
+                body=body
+            )
+            return f"Deployment {deployment_name} 已扩缩容至 {replicas} 个副本"
+        except Exception as e:
+            return f"扩缩容失败: {str(e)}"
+    
+    @tool
+    def get_service_status(self, namespace: str = "default") -> str:
+        """获取所有Service状态和端点信息"""
+        try:
+            services = self.v1.list_namespaced_service(namespace)
+            result = []
+            
+            for svc in services.items:
+                svc_info = {
+                    "name": svc.metadata.name,
+                    "type": svc.spec.type,
+                    "cluster_ip": svc.spec.cluster_ip,
+                    "ports": [
+                        f"{port.port}:{port.target_port}/{port.protocol}"
+                        for port in (svc.spec.ports or [])
+                    ],
+                    "selector": svc.spec.selector
+                }
+                result.append(svc_info)
+            
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        except Exception as e:
+            return f"获取Service状态失败: {str(e)}"
+    
+    @tool
+    def run_kubectl_command(self, command: str) -> str:
+        """执行kubectl命令（仅限查询类命令，修改类命令需要额外授权）"""
+        # 安全检查：只允许查询命令
+        safe_commands = ["get", "describe", "logs", "top", "explain"]
+        if not any(cmd in command for cmd in safe_commands):
+            return "拒绝执行：仅允许查询类命令"
+        
+        try:
+            result = subprocess.run(
+                f"kubectl {command}",
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            return result.stdout if result.returncode == 0 else result.stderr
+        except Exception as e:
+            return f"执行kubectl命令失败: {str(e)}"
+

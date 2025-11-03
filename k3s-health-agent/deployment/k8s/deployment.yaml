@@ -1,0 +1,189 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3s-health-agent
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-config
+  namespace: k3s-health-agent
+data:
+  config.yaml: |
+    agent:
+      model: "gpt-4-turbo-preview"
+      temperature: 0
+      max_iterations: 15
+    
+    monitoring:
+      check_interval: 300  # 5分钟
+      alert_threshold:
+        cpu: 80
+        memory: 85
+        restart_count: 5
+    
+    notifications:
+      enabled: true
+      channels:
+        - type: webhook
+          url: "https://your-webhook-url"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agent-secrets
+  namespace: k3s-health-agent
+type: Opaque
+stringData:
+  openai-api-key: "your-openai-api-key"
+  db-password: "your-db-password"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k3s-health-agent
+  namespace: k3s-health-agent
+  labels:
+    app: k3s-health-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k3s-health-agent
+  template:
+    metadata:
+      labels:
+        app: k3s-health-agent
+    spec:
+      serviceAccountName: k3s-health-agent
+      containers:
+      - name: agent
+        image: your-registry/k3s-health-agent:latest
+        ports:
+        - containerPort: 8000
+          name: api
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: agent-secrets
+              key: openai-api-key
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: agent-secrets
+              key: db-password
+        - name: K3S_IN_CLUSTER
+          value: "true"
+        - name: QDRANT_URL
+          value: "http://qdrant:6333"
+        - name: DB_HOST
+          value: "postgres"
+        - name: REDIS_HOST
+          value: "redis"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+        - name: knowledge-base
+          mountPath: /app/knowledge_base
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: agent-config
+      - name: knowledge-base
+        persistentVolumeClaim:
+          claimName: knowledge-base-pvc
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: knowledge-base-pvc
+  namespace: k3s-health-agent
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k3s-health-agent
+  namespace: k3s-health-agent
+spec:
+  selector:
+    app: k3s-health-agent
+  ports:
+  - name: api
+    port: 8000
+    targetPort: 8000
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k3s-health-agent
+  namespace: k3s-health-agent
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k3s-health-agent
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "pods", "services", "events", "namespaces"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["delete"]  # 用于重启Pod
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch", "patch"]  # patch用于扩缩容
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["nodes", "pods"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k3s-health-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k3s-health-agent
+subjects:
+- kind: ServiceAccount
+  name: k3s-health-agent
+  namespace: k3s-health-agent
+

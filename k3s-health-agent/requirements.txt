@@ -1,0 +1,51 @@
+# AI框架
+langchain==0.1.0
+langchain-openai==0.0.2
+langchain-community==0.0.20
+openai==1.10.0
+
+# RAG相关
+qdrant-client==1.7.0
+sentence-transformers==2.3.1
+cohere==4.47  # 用于Rerank
+
+# 文档处理
+unstructured==0.11.8
+pypdf==3.17.4
+python-magic==0.4.27
+markdown==3.5.1
+beautifulsoup4==4.12.3
+tiktoken==0.5.2
+
+# Web框架
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+streamlit==1.30.0
+python-multipart==0.0.6
+
+# Kubernetes
+kubernetes==28.1.0
+prometheus-api-client==0.5.3
+
+# 数据库
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+redis==5.0.1
+alembic==1.13.1
+
+# 工具
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+requests==2.31.0
+
+# 可视化
+plotly==5.18.0
+pandas==2.1.4
+
+# 监控
+prometheus-client==0.19.0
+
+# 日志
+loguru==0.7.2
+
