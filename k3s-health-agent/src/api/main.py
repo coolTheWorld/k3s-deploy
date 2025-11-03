@@ -39,7 +39,8 @@ async def lifespan(app: FastAPI):
         agent = K3sHealthAgentRAG(
             api_key=settings.OPENAI_API_KEY,
             cluster_config=settings.K3S_CONFIG,
-            rag_config=settings.RAG_CONFIG
+            rag_config=settings.RAG_CONFIG,
+            enable_rag=False  # 禁用 RAG
         )
         
         # 启动后台任务
@@ -88,8 +89,8 @@ async def periodic_health_check():
                 if result.get("status") == "success":
                     logger.info("=" * 80)
                     logger.info("集群健康检查完成")
-                    logger.info("-" * 80)
-                    logger.info(f"分析结果:\n{result.get('analysis', 'N/A')}")
+                    # logger.info("-" * 80)
+                    # logger.info(f"分析结果:\n{result.get('analysis', 'N/A')}")
                     logger.info("=" * 80)
                 else:
                     logger.error(f"健康检查失败: {result.get('error', 'Unknown error')}")

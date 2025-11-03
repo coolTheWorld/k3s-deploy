@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 class K3sHealthAgentRAG:
-    """RAG增强的K3s集群健康监控AI Agent"""
+    """K3s集群健康监控AI Agent（可选RAG增强）"""
 
-    def __init__(self, api_key: str, cluster_config: dict, rag_config: dict):
+    def __init__(self, api_key: str, cluster_config: dict, rag_config: dict = None, enable_rag: bool = False):
         logger.info("Initializing K3s Health Agent...")
 
         # self.llm = ChatOpenAI(
@@ -37,20 +37,31 @@ class K3sHealthAgentRAG:
         # 初始化K3s工具集
         self.k3s_tools = K3sTools(cluster_config)
 
-        # 初始化RAG引擎
-        self.rag_engine = RAGEngine(rag_config)
+        # RAG 开关
+        self.enable_rag = enable_rag
+        self.rag_engine = None
+        self.kb_manager = None
 
-        # 初始化知识库管理器
-        self.kb_manager = KnowledgeBaseManager(
-            self.rag_engine,
-            rag_config.get("knowledge_base_path", "./knowledge_base")
-        )
-
-        # 初始化知识库
-        try:
-            self.kb_manager.initialize_knowledge_base()
-        except Exception as e:
-            logger.error(f"Failed to initialize knowledge base: {e}")
+        # 仅在启用 RAG 时初始化
+        if self.enable_rag and rag_config:
+            try:
+                logger.info("Initializing RAG engine...")
+                self.rag_engine = RAGEngine(rag_config)
+                
+                self.kb_manager = KnowledgeBaseManager(
+                    self.rag_engine,
+                    rag_config.get("knowledge_base_path", "./knowledge_base")
+                )
+                
+                self.kb_manager.initialize_knowledge_base()
+                logger.info("RAG engine initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize RAG engine (continuing without RAG): {e}")
+                self.enable_rag = False
+                self.rag_engine = None
+                self.kb_manager = None
+        else:
+            logger.info("RAG engine disabled, running in basic mode")
 
         # 手动管理聊天历史（替代已弃用的 ConversationBufferMemory）
         self.chat_history: List = []
@@ -81,25 +92,24 @@ class K3sHealthAgentRAG:
             agent=agent,
             tools=tools,
             verbose=True,
-            max_iterations=15,  # 增加迭代次数以支持RAG
+            max_iterations=100,  # 禁用迭代限制
+            max_execution_time=1200,  # 添加20分钟超时保护
             handle_parsing_errors=True
         )
 
     async def analyze_cluster_health(self) -> dict:
-        """RAG增强的集群健康检查"""
+        """集群健康检查（可选RAG增强）"""
         try:
-            # 检索相关的最佳实践
-            best_practices = self.rag_engine.retrieve_best_practices(
-                "kubernetes cluster health check monitoring",
-                k=3
-            )
-
-            retrieved_context = self.rag_engine.format_retrieved_context(
-                best_practices
-            )
-
-            # 构建包含上下文信息的完整输入
-            full_input = f"""当前时间: {datetime.now().isoformat()}
+            # 条件性使用 RAG
+            if self.enable_rag and self.rag_engine:
+                # RAG 增强模式
+                best_practices = self.rag_engine.retrieve_best_practices(
+                    "kubernetes cluster health check monitoring",
+                    k=3
+                )
+                retrieved_context = self.rag_engine.format_retrieved_context(best_practices)
+                
+                full_input = f"""当前时间: {datetime.now().isoformat()}
 
 【检索到的相关知识】
 {retrieved_context}
@@ -107,6 +117,13 @@ class K3sHealthAgentRAG:
 ---
 
 {HEALTH_CHECK_PROMPT}"""
+                references = [doc.metadata for doc in best_practices]
+            else:
+                # 基础模式（无 RAG）
+                full_input = f"""当前时间: {datetime.now().isoformat()}
+
+{HEALTH_CHECK_PROMPT}"""
+                references = []
 
             result = await self.agent.ainvoke({
                 "input": full_input,
@@ -121,7 +138,8 @@ class K3sHealthAgentRAG:
                 "status": "success",
                 "analysis": result["output"],
                 "timestamp": datetime.now().isoformat(),
-                "references": [doc.metadata for doc in best_practices]
+                "references": references,
+                "rag_enabled": self.enable_rag
             }
         except Exception as e:
             logger.error(f"Health analysis failed: {e}")
@@ -131,33 +149,36 @@ class K3sHealthAgentRAG:
             }
 
     async def diagnose_issue(self, issue_description: str) -> dict:
-        """RAG增强的问题诊断"""
+        """问题诊断（可选RAG增强）"""
         try:
-            # 检索相似的历史事件
-            similar_incidents = self.rag_engine.retrieve_similar_incidents(
-                issue_description,
-                k=3
-            )
+            # 条件性使用 RAG
+            if self.enable_rag and self.rag_engine:
+                # RAG 增强模式
+                # 检索相似的历史事件
+                similar_incidents = self.rag_engine.retrieve_similar_incidents(
+                    issue_description,
+                    k=3
+                )
 
-            # 检索相关解决方案
-            solutions = self.rag_engine.retrieve_solutions(
-                issue_description,
-                k=3
-            )
+                # 检索相关解决方案
+                solutions = self.rag_engine.retrieve_solutions(
+                    issue_description,
+                    k=3
+                )
 
-            # 检索K8s文档
-            k8s_docs = self.rag_engine.retrieve(
-                issue_description,
-                k=2,
-                filter_dict={"doc_type": "k8s_doc"}
-            )
+                # 检索K8s文档
+                k8s_docs = self.rag_engine.retrieve(
+                    issue_description,
+                    k=2,
+                    filter_dict={"doc_type": "k8s_doc"}
+                )
 
-            # 组合检索结果
-            all_docs = similar_incidents + solutions + k8s_docs
-            retrieved_context = self.rag_engine.format_retrieved_context(all_docs)
+                # 组合检索结果
+                all_docs = similar_incidents + solutions + k8s_docs
+                retrieved_context = self.rag_engine.format_retrieved_context(all_docs)
 
-            # 构建包含上下文信息的完整输入
-            full_input = f"""当前时间: {datetime.now().isoformat()}
+                # 构建包含上下文信息的完整输入
+                full_input = f"""当前时间: {datetime.now().isoformat()}
 
 【检索到的相关知识】
 {retrieved_context}
@@ -166,35 +187,59 @@ class K3sHealthAgentRAG:
 
 {DIAGNOSE_PROMPT.format(issue_description=issue_description)}"""
 
-            result = await self.agent.ainvoke({
-                "input": full_input,
-                "chat_history": self.chat_history
-            })
+                result = await self.agent.ainvoke({
+                    "input": full_input,
+                    "chat_history": self.chat_history
+                })
 
-            # 更新聊天历史
-            self.chat_history.append(HumanMessage(content=full_input))
-            self.chat_history.append(AIMessage(content=result["output"]))
+                # 更新聊天历史
+                self.chat_history.append(HumanMessage(content=full_input))
+                self.chat_history.append(AIMessage(content=result["output"]))
 
-            return {
-                "status": "success",
-                "diagnosis": result["output"],
-                "timestamp": datetime.now().isoformat(),
-                "similar_incidents": [
-                    {
-                        "id": doc.metadata.get("incident_id"),
-                        "snippet": doc.page_content[:200] + "..."
-                    }
-                    for doc in similar_incidents
-                ],
-                "related_solutions": [
-                    {
-                        "id": doc.metadata.get("solution_id"),
-                        "problem_type": doc.metadata.get("problem_type"),
-                        "success_rate": doc.metadata.get("success_rate")
-                    }
-                    for doc in solutions
-                ]
-            }
+                return {
+                    "status": "success",
+                    "diagnosis": result["output"],
+                    "timestamp": datetime.now().isoformat(),
+                    "similar_incidents": [
+                        {
+                            "id": doc.metadata.get("incident_id"),
+                            "snippet": doc.page_content[:200] + "..."
+                        }
+                        for doc in similar_incidents
+                    ],
+                    "related_solutions": [
+                        {
+                            "id": doc.metadata.get("solution_id"),
+                            "problem_type": doc.metadata.get("problem_type"),
+                            "success_rate": doc.metadata.get("success_rate")
+                        }
+                        for doc in solutions
+                    ],
+                    "rag_enabled": True
+                }
+            else:
+                # 基础模式（无 RAG）
+                full_input = f"""当前时间: {datetime.now().isoformat()}
+
+{DIAGNOSE_PROMPT.format(issue_description=issue_description)}"""
+
+                result = await self.agent.ainvoke({
+                    "input": full_input,
+                    "chat_history": self.chat_history
+                })
+
+                # 更新聊天历史
+                self.chat_history.append(HumanMessage(content=full_input))
+                self.chat_history.append(AIMessage(content=result["output"]))
+
+                return {
+                    "status": "success",
+                    "diagnosis": result["output"],
+                    "timestamp": datetime.now().isoformat(),
+                    "similar_incidents": [],
+                    "related_solutions": [],
+                    "rag_enabled": False
+                }
         except Exception as e:
             logger.error(f"Diagnosis failed: {e}")
             return {
@@ -203,7 +248,7 @@ class K3sHealthAgentRAG:
             }
 
     async def auto_fix(self, issue: dict, auto_approve: bool = False) -> dict:
-        """RAG增强的自动修复"""
+        """自动修复（可选RAG增强）"""
         if not auto_approve:
             return {
                 "status": "pending_approval",
@@ -211,21 +256,29 @@ class K3sHealthAgentRAG:
             }
 
         try:
-            # 检索成功的解决方案
-            solutions = self.rag_engine.retrieve_solutions(
-                issue.get('description'),
-                k=3
-            )
+            # 条件性使用 RAG
+            if self.enable_rag and self.rag_engine:
+                # RAG 增强模式
+                # 检索成功的解决方案
+                solutions = self.rag_engine.retrieve_solutions(
+                    issue.get('description'),
+                    k=3
+                )
 
-            retrieved_context = self.rag_engine.format_retrieved_context(solutions)
+                retrieved_context = self.rag_engine.format_retrieved_context(solutions)
 
-            # 构建包含上下文信息的完整输入
-            full_input = f"""当前时间: {datetime.now().isoformat()}
+                # 构建包含上下文信息的完整输入
+                full_input = f"""当前时间: {datetime.now().isoformat()}
 
 【检索到的相关知识】
 {retrieved_context}
 
 ---
+
+{FIX_PROMPT.format(issue_description=issue.get('description'))}"""
+            else:
+                # 基础模式（无 RAG）
+                full_input = f"""当前时间: {datetime.now().isoformat()}
 
 {FIX_PROMPT.format(issue_description=issue.get('description'))}"""
 
@@ -238,14 +291,15 @@ class K3sHealthAgentRAG:
             self.chat_history.append(HumanMessage(content=full_input))
             self.chat_history.append(AIMessage(content=result["output"]))
 
-            # 自动记录成功的修复到知识库
-            if result.get("status") == "success":
+            # 自动记录成功的修复到知识库（仅在 RAG 启用时）
+            if self.enable_rag and result.get("status") == "success":
                 await self._record_successful_fix(issue, result)
 
             return {
                 "status": "success",
                 "fix_result": result["output"],
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "rag_enabled": self.enable_rag
             }
         except Exception as e:
             logger.error(f"Auto fix failed: {e}")
@@ -275,6 +329,13 @@ class K3sHealthAgentRAG:
 
     def search_knowledge(self, query: str, k: int = 5) -> dict:
         """搜索知识库"""
+        # 检查 RAG 是否启用
+        if not self.enable_rag or not self.kb_manager:
+            return {
+                "status": "error",
+                "error": "RAG engine is disabled. Enable RAG to use knowledge base search."
+            }
+        
         try:
             docs = self.kb_manager.search_knowledge_base(query, k=k)
 
