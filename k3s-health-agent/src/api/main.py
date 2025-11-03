@@ -82,7 +82,17 @@ async def periodic_health_check():
         try:
             if agent:
                 logger.info("Running periodic health check...")
-                await agent.analyze_cluster_health()
+                result = await agent.analyze_cluster_health()
+                
+                # 输出健康检查结果
+                if result.get("status") == "success":
+                    logger.info("=" * 80)
+                    logger.info("集群健康检查完成")
+                    logger.info("-" * 80)
+                    logger.info(f"分析结果:\n{result.get('analysis', 'N/A')}")
+                    logger.info("=" * 80)
+                else:
+                    logger.error(f"健康检查失败: {result.get('error', 'Unknown error')}")
         except Exception as e:
             logger.error(f"Periodic health check failed: {e}")
         
