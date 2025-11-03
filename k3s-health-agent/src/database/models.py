@@ -35,7 +35,7 @@ class Alert(Base):
     description = Column(Text)
     status = Column(String(50), default="open")  # open, in_progress, resolved
     resolved_at = Column(DateTime(timezone=True), nullable=True)
-    metadata = Column(JSON)
+    alert_metadata = Column(JSON)
     
     def to_dict(self):
         return {
@@ -46,7 +46,7 @@ class Alert(Base):
             "description": self.description,
             "status": self.status,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
-            "metadata": self.metadata
+            "alert_metadata": self.alert_metadata
         }
 
 

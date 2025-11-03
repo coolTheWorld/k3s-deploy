@@ -1,12 +1,20 @@
 """RAG检索引擎"""
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import Qdrant
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.retrievers import ContextualCompressionRetriever
-from langchain.retrievers.document_compressors import CohereRerank
-from langchain.schema import Document
+# from langchain.embeddings import OpenAIEmbeddings
+# from langchain.vectorstores import Qdrant
+# from langchain.text_splitter import RecursiveCharacterTextSplitter
+# from langchain.retrievers import ContextualCompressionRetriever
+# from langchain.retrievers.document_compressors import CohereRerank
+# from langchain.schema import Document
 from typing import List, Dict, Optional
 import logging
+
+from langchain_classic.retrievers import ContextualCompressionRetriever
+from langchain_classic.retrievers.document_compressors import CohereRerank
+from langchain_community.vectorstores import Qdrant
+from langchain_core.documents import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from qdrant_client import QdrantClient
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +56,6 @@ class RAGEngine:
     
     def _init_qdrant_client(self):
         """初始化Qdrant客户端"""
-        from qdrant_client import QdrantClient
         
         if self.config.get("qdrant_url"):
             # 连接到远程Qdrant服务
@@ -108,8 +115,8 @@ class RAGEngine:
                     base_retriever=retriever
                 )
             
-            # 执行检索
-            docs = retriever.get_relevant_documents(query)
+            # 执行检索（使用新版 LangChain 的 invoke 方法）
+            docs = retriever.invoke(query)
             
             logger.info(f"Retrieved {len(docs)} documents for query: {query[:50]}...")
             return docs

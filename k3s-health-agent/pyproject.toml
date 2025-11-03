@@ -1,0 +1,20 @@
+[project]
+name = "k3s-health-agent"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.121.0",
+    "kubernetes>=34.1.0",
+    "langchain>=1.0.3",
+    "langchain-community>=0.4.1",
+    "langchain-openai>=1.0.1",
+    #    "memory>=1.0.0",
+    #    "prompts>=0.0.1",
+    "prometheus-api-client>=0.6.0",
+    "psycopg2-binary>=2.9.11",
+    "pydantic-settings>=2.11.0",
+    "python-multipart>=0.0.20",
+    "qdrant-client>=1.15.1",
+    "uvicorn>=0.38.0",
+]

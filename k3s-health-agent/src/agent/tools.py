@@ -1,10 +1,13 @@
 """K3s工具集"""
-from langchain.tools import tool
+# from langchain.tools import Tool
 from kubernetes import client, config
+from kubernetes.client import Configuration
 from typing import Optional, List
 import subprocess
 import json
 import logging
+
+from langchain_core.tools import Tool
 
 logger = logging.getLogger(__name__)
 
@@ -15,21 +18,43 @@ class K3sTools:
     def __init__(self, cluster_config: dict):
         """初始化K3s工具集"""
         try:
-            # 加载K8s配置
-            if cluster_config.get("in_cluster"):
+            # 检查是否使用 kubectl proxy
+            if cluster_config.get("proxy_url"):
+                # 使用 kubectl proxy 连接
+                configuration = Configuration()
+                configuration.host = cluster_config.get("proxy_url")
+                # kubectl proxy 不需要认证
+                configuration.verify_ssl = False
+                
+                # 创建 API 客户端
+                api_client = client.ApiClient(configuration)
+                self.v1 = client.CoreV1Api(api_client)
+                self.apps_v1 = client.AppsV1Api(api_client)
+                self.metrics_api = client.CustomObjectsApi(api_client)
+                
+                logger.info(f"K3s tools initialized with proxy: {configuration.host}")
+                
+            elif cluster_config.get("in_cluster"):
+                # 集群内运行
                 config.load_incluster_config()
+                self.v1 = client.CoreV1Api()
+                self.apps_v1 = client.AppsV1Api()
+                self.metrics_api = client.CustomObjectsApi()
+                logger.info("K3s tools initialized (in-cluster)")
+                
             else:
+                # 使用 kubeconfig 文件
                 kubeconfig = cluster_config.get("kubeconfig")
                 if kubeconfig:
                     config.load_kube_config(config_file=kubeconfig)
                 else:
                     config.load_kube_config()
+                
+                self.v1 = client.CoreV1Api()
+                self.apps_v1 = client.AppsV1Api()
+                self.metrics_api = client.CustomObjectsApi()
+                logger.info("K3s tools initialized (kubeconfig)")
             
-            self.v1 = client.CoreV1Api()
-            self.apps_v1 = client.AppsV1Api()
-            self.metrics_api = client.CustomObjectsApi()
-            
-            logger.info("K3s tools initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize K3s tools: {e}")
             raise
@@ -37,18 +62,53 @@ class K3sTools:
     def get_tools(self):
         """返回所有工具"""
         return [
-            self.get_cluster_nodes,
-            self.get_pod_status,
-            self.get_pod_logs,
-            self.get_node_metrics,
-            self.get_events,
-            self.restart_pod,
-            self.scale_deployment,
-            self.get_service_status,
-            self.run_kubectl_command
+            Tool(
+                name="get_cluster_nodes",
+                func=self.get_cluster_nodes,
+                description="获取集群所有节点状态，包括节点名称、状态、角色、版本、资源容量等信息"
+            ),
+            Tool(
+                name="get_pod_status",
+                func=self.get_pod_status,
+                description="获取指定命名空间的所有Pod状态，包括运行状态、重启次数、资源使用等。参数: namespace (str, 可选, 默认'default')"
+            ),
+            Tool(
+                name="get_pod_logs",
+                func=self.get_pod_logs,
+                description="获取指定Pod的日志，用于问题诊断和错误分析。参数: pod_name (str, 必需), namespace (str, 可选, 默认'default'), tail_lines (int, 可选, 默认100)"
+            ),
+            Tool(
+                name="get_node_metrics",
+                func=self.get_node_metrics,
+                description="获取节点的实时资源使用指标（CPU、内存使用率）"
+            ),
+            Tool(
+                name="get_events",
+                func=self.get_events,
+                description="获取集群事件，包括Warning和Error级别的事件，用于问题追踪。参数: namespace (str, 可选, 默认'default'), limit (int, 可选, 默认50)"
+            ),
+            Tool(
+                name="restart_pod",
+                func=self.restart_pod,
+                description="重启指定的Pod（通过删除Pod让Deployment重建）。参数: pod_name (str, 必需), namespace (str, 可选, 默认'default')"
+            ),
+            Tool(
+                name="scale_deployment",
+                func=self.scale_deployment,
+                description="调整Deployment的副本数量，用于扩缩容。参数: deployment_name (str, 必需), replicas (int, 必需), namespace (str, 可选, 默认'default')"
+            ),
+            Tool(
+                name="get_service_status",
+                func=self.get_service_status,
+                description="获取所有Service状态和端点信息。参数: namespace (str, 可选, 默认'default')"
+            ),
+            Tool(
+                name="run_kubectl_command",
+                func=self.run_kubectl_command,
+                description="执行kubectl命令（仅限查询类命令，修改类命令需要额外授权）。参数: command (str, 必需)"
+            )
         ]
     
-    @tool
     def get_cluster_nodes(self) -> str:
         """获取集群所有节点状态，包括节点名称、状态、角色、版本、资源容量等信息"""
         try:
@@ -74,7 +134,6 @@ class K3sTools:
         except Exception as e:
             return f"获取节点信息失败: {str(e)}"
     
-    @tool
     def get_pod_status(self, namespace: str = "default") -> str:
         """获取指定命名空间的所有Pod状态，包括运行状态、重启次数、资源使用等"""
         try:
@@ -112,7 +171,6 @@ class K3sTools:
         except Exception as e:
             return f"获取Pod状态失败: {str(e)}"
     
-    @tool
     def get_pod_logs(self, pod_name: str, namespace: str = "default", 
                      tail_lines: int = 100) -> str:
         """获取指定Pod的日志，用于问题诊断和错误分析"""
@@ -126,7 +184,6 @@ class K3sTools:
         except Exception as e:
             return f"获取Pod日志失败: {str(e)}"
     
-    @tool
     def get_node_metrics(self) -> str:
         """获取节点的实时资源使用指标（CPU、内存使用率）"""
         try:
@@ -150,7 +207,6 @@ class K3sTools:
         except Exception as e:
             return f"获取节点指标失败: {str(e)}"
     
-    @tool
     def get_events(self, namespace: str = "default", limit: int = 50) -> str:
         """获取集群事件，包括Warning和Error级别的事件，用于问题追踪"""
         try:
@@ -176,7 +232,6 @@ class K3sTools:
         except Exception as e:
             return f"获取事件失败: {str(e)}"
     
-    @tool
     def restart_pod(self, pod_name: str, namespace: str = "default") -> str:
         """重启指定的Pod（通过删除Pod让Deployment重建）"""
         try:
@@ -189,7 +244,6 @@ class K3sTools:
         except Exception as e:
             return f"重启Pod失败: {str(e)}"
     
-    @tool
     def scale_deployment(self, deployment_name: str, replicas: int, 
                          namespace: str = "default") -> str:
         """调整Deployment的副本数量，用于扩缩容"""
@@ -204,7 +258,6 @@ class K3sTools:
         except Exception as e:
             return f"扩缩容失败: {str(e)}"
     
-    @tool
     def get_service_status(self, namespace: str = "default") -> str:
         """获取所有Service状态和端点信息"""
         try:
@@ -228,7 +281,6 @@ class K3sTools:
         except Exception as e:
             return f"获取Service状态失败: {str(e)}"
     
-    @tool
     def run_kubectl_command(self, command: str) -> str:
         """执行kubectl命令（仅限查询类命令，修改类命令需要额外授权）"""
         # 安全检查：只允许查询命令

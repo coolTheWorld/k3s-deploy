@@ -1,15 +1,18 @@
 """知识库管理"""
 from pathlib import Path
 from typing import List, Dict, Optional
-from langchain.document_loaders import (
-    TextLoader,
-    UnstructuredMarkdownLoader,
-    DirectoryLoader
-)
-from langchain.schema import Document
+# from langchain.document_loaders import (
+#     TextLoader,
+#     UnstructuredMarkdownLoader,
+#     DirectoryLoader
+# )
+# from langchain.schema import Document
 import json
 import logging
 from datetime import datetime
+
+from langchain_community.document_loaders import UnstructuredMarkdownLoader, DirectoryLoader
+from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 

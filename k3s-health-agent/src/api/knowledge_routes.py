@@ -1,5 +1,6 @@
 """知识库管理API"""
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from langchain_community.document_loaders import TextLoader
 from pydantic import BaseModel
 from typing import List, Optional
 import logging
@@ -95,8 +96,7 @@ async def upload_document(
     """上传文档到知识库"""
     try:
         from .main import get_agent
-        from langchain.document_loaders import TextLoader
-        from langchain.schema import Document
+
         
         agent = get_agent()
         

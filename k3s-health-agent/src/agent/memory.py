@@ -1,5 +1,5 @@
 """记忆管理模块"""
-from langchain.memory import ConversationBufferMemory, ConversationSummaryMemory
+from langchain_classic.memory import ConversationBufferMemory, ConversationSummaryMemory
 from langchain_openai import ChatOpenAI
 from typing import Optional
 import logging
