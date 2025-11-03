@@ -21,10 +21,7 @@ SYSTEM_PROMPT = """你是一个专业的Kubernetes/K3s集群运维专家AI Agent
 - 引用历史案例时注明来源和成功率
 - 每次成功解决问题后，自动记录到知识库
 
-当前时间: {current_time}
-
-【检索到的相关知识】
-{retrieved_context}
+注意：用户的问题中可能会包含当前时间和检索到的相关知识，请仔细参考这些信息。
 """
 
 HEALTH_CHECK_PROMPT = """请执行完整的集群健康检查：

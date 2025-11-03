@@ -1,5 +1,4 @@
 """K3s工具集"""
-# from langchain.tools import Tool
 from kubernetes import client, config
 from kubernetes.client import Configuration
 from typing import Optional, List
@@ -7,9 +6,40 @@ import subprocess
 import json
 import logging
 
-from langchain_core.tools import Tool
+from langchain_core.tools import Tool, StructuredTool
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+
+# Pydantic schemas for structured tools
+class PodStatusInput(BaseModel):
+    namespace: str = Field(default="default", description="Kubernetes namespace")
+
+class PodLogsInput(BaseModel):
+    pod_name: str = Field(description="Pod name")
+    namespace: str = Field(default="default", description="Kubernetes namespace")
+    container: Optional[str] = Field(default=None, description="Container name (required for multi-container pods)")
+    tail_lines: int = Field(default=100, description="Number of log lines to retrieve")
+
+class EventsInput(BaseModel):
+    namespace: str = Field(default="default", description="Kubernetes namespace")
+    limit: int = Field(default=50, description="Maximum number of events to retrieve")
+
+class RestartPodInput(BaseModel):
+    pod_name: str = Field(description="Pod name to restart")
+    namespace: str = Field(default="default", description="Kubernetes namespace")
+
+class ScaleDeploymentInput(BaseModel):
+    deployment_name: str = Field(description="Deployment name")
+    replicas: int = Field(description="Target number of replicas")
+    namespace: str = Field(default="default", description="Kubernetes namespace")
+
+class ServiceStatusInput(BaseModel):
+    namespace: str = Field(default="default", description="Kubernetes namespace")
+
+class KubectlCommandInput(BaseModel):
+    command: str = Field(description="kubectl command to execute (query commands only)")
 
 
 class K3sTools:
@@ -67,45 +97,52 @@ class K3sTools:
                 func=self.get_cluster_nodes,
                 description="获取集群所有节点状态，包括节点名称、状态、角色、版本、资源容量等信息"
             ),
-            Tool(
+            StructuredTool(
                 name="get_pod_status",
                 func=self.get_pod_status,
-                description="获取指定命名空间的所有Pod状态，包括运行状态、重启次数、资源使用等。参数: namespace (str, 可选, 默认'default')"
+                description="获取指定命名空间的所有Pod状态，包括运行状态、重启次数、资源使用等",
+                args_schema=PodStatusInput
             ),
-            Tool(
+            StructuredTool(
                 name="get_pod_logs",
                 func=self.get_pod_logs,
-                description="获取指定Pod的日志，用于问题诊断和错误分析。参数: pod_name (str, 必需), namespace (str, 可选, 默认'default'), container (str, 可选, 多容器Pod需要指定), tail_lines (int, 可选, 默认100)"
+                description="获取指定Pod的日志，用于问题诊断和错误分析",
+                args_schema=PodLogsInput
             ),
             Tool(
                 name="get_node_metrics",
                 func=self.get_node_metrics,
                 description="获取节点的实时资源使用指标（CPU、内存使用率）"
             ),
-            Tool(
+            StructuredTool(
                 name="get_events",
                 func=self.get_events,
-                description="获取集群事件，包括Warning和Error级别的事件，用于问题追踪。参数: namespace (str, 可选, 默认'default'), limit (int, 可选, 默认50)"
+                description="获取集群事件，包括Warning和Error级别的事件，用于问题追踪",
+                args_schema=EventsInput
             ),
-            Tool(
+            StructuredTool(
                 name="restart_pod",
                 func=self.restart_pod,
-                description="重启指定的Pod（通过删除Pod让Deployment重建）。参数: pod_name (str, 必需), namespace (str, 可选, 默认'default')"
+                description="重启指定的Pod（通过删除Pod让Deployment重建）",
+                args_schema=RestartPodInput
             ),
-            Tool(
+            StructuredTool(
                 name="scale_deployment",
                 func=self.scale_deployment,
-                description="调整Deployment的副本数量，用于扩缩容。参数: deployment_name (str, 必需), replicas (int, 必需), namespace (str, 可选, 默认'default')"
+                description="调整Deployment的副本数量，用于扩缩容",
+                args_schema=ScaleDeploymentInput
             ),
-            Tool(
+            StructuredTool(
                 name="get_service_status",
                 func=self.get_service_status,
-                description="获取所有Service状态和端点信息。参数: namespace (str, 可选, 默认'default')"
+                description="获取所有Service状态和端点信息",
+                args_schema=ServiceStatusInput
             ),
-            Tool(
+            StructuredTool(
                 name="run_kubectl_command",
                 func=self.run_kubectl_command,
-                description="执行kubectl命令（仅限查询类命令，修改类命令需要额外授权）。参数: command (str, 必需)"
+                description="执行kubectl命令（仅限查询类命令，修改类命令需要额外授权）",
+                args_schema=KubectlCommandInput
             )
         ]
     
@@ -137,7 +174,11 @@ class K3sTools:
     def get_pod_status(self, namespace: str = "default") -> str:
         """获取指定命名空间的所有Pod状态，包括运行状态、重启次数、资源使用等"""
         try:
-            pods = self.v1.list_namespaced_pod(namespace)
+            # 如果 namespace 为 'all'，获取所有命名空间的 Pod
+            if namespace.lower() == 'all':
+                pods = self.v1.list_pod_for_all_namespaces()
+            else:
+                pods = self.v1.list_namespaced_pod(namespace)
             result = []
             
             for pod in pods.items:
@@ -218,7 +259,11 @@ class K3sTools:
     def get_events(self, namespace: str = "default", limit: int = 50) -> str:
         """获取集群事件，包括Warning和Error级别的事件，用于问题追踪"""
         try:
-            events = self.v1.list_namespaced_event(namespace)
+            # 如果 namespace 为 'all'，获取所有命名空间的事件
+            if namespace.lower() == 'all':
+                events = self.v1.list_event_for_all_namespaces()
+            else:
+                events = self.v1.list_namespaced_event(namespace)
             result = []
             
             for event in events.items[:limit]:
@@ -269,7 +314,11 @@ class K3sTools:
     def get_service_status(self, namespace: str = "default") -> str:
         """获取所有Service状态和端点信息"""
         try:
-            services = self.v1.list_namespaced_service(namespace)
+            # 如果 namespace 为 'all'，获取所有命名空间的 Service
+            if namespace.lower() == 'all':
+                services = self.v1.list_service_for_all_namespaces()
+            else:
+                services = self.v1.list_namespaced_service(namespace)
             result = []
             
             for svc in services.items:
