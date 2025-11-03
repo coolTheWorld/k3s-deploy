@@ -26,10 +26,26 @@ class RAGEngine:
         self.config = config
         
         # 初始化嵌入模型
-        self.embeddings = OpenAIEmbeddings(
-            model="text-embedding-3-large",  # 最新的嵌入模型
-            api_key=config.get("openai_api_key")
-        )
+        # 如果使用阿里云 DashScope，需要配置 base_url
+        embeddings_config = {
+            "api_key": config.get("openai_api_key"),
+            "model": config.get("embedding_model", "text-embedding-v1"),
+            "timeout": 10,  # 设置超时时间
+            "max_retries": 1  # 减少重试次数
+        }
+        
+        # 检查是否使用阿里云（通过 API key 前缀判断）
+        api_key = config.get("openai_api_key", "")
+        if api_key.startswith("sk-") and "dashscope" not in api_key.lower():
+            # 真正的 OpenAI
+            embeddings_config["model"] = "text-embedding-3-large"
+        else:
+            # 阿里云 DashScope - 使用正确的模型名称
+            embeddings_config["base_url"] = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            # 阿里云支持的 embedding 模型：text-embedding-v1, text-embedding-v2, text-embedding-v3
+            embeddings_config["model"] = "text-embedding-v3"
+        
+        self.embeddings = OpenAIEmbeddings(**embeddings_config)
         
         # 初始化向量数据库
         self.vector_store = Qdrant(

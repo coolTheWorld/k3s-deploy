@@ -101,10 +101,18 @@ class K3sHealthAgentRAG:
                 best_practices
             )
 
+            # 构建包含上下文信息的完整输入
+            full_input = f"""当前时间: {datetime.now().isoformat()}
+
+【检索到的相关知识】
+{retrieved_context}
+
+---
+
+{HEALTH_CHECK_PROMPT}"""
+
             result = await self.agent.ainvoke({
-                "input": HEALTH_CHECK_PROMPT,
-                "current_time": datetime.now().isoformat(),
-                "retrieved_context": retrieved_context
+                "input": full_input
             })
 
             return {
@@ -146,10 +154,18 @@ class K3sHealthAgentRAG:
             all_docs = similar_incidents + solutions + k8s_docs
             retrieved_context = self.rag_engine.format_retrieved_context(all_docs)
 
+            # 构建包含上下文信息的完整输入
+            full_input = f"""当前时间: {datetime.now().isoformat()}
+
+【检索到的相关知识】
+{retrieved_context}
+
+---
+
+{DIAGNOSE_PROMPT.format(issue_description=issue_description)}"""
+
             result = await self.agent.ainvoke({
-                "input": DIAGNOSE_PROMPT.format(issue_description=issue_description),
-                "current_time": datetime.now().isoformat(),
-                "retrieved_context": retrieved_context
+                "input": full_input
             })
 
             return {
@@ -196,10 +212,18 @@ class K3sHealthAgentRAG:
 
             retrieved_context = self.rag_engine.format_retrieved_context(solutions)
 
+            # 构建包含上下文信息的完整输入
+            full_input = f"""当前时间: {datetime.now().isoformat()}
+
+【检索到的相关知识】
+{retrieved_context}
+
+---
+
+{FIX_PROMPT.format(issue_description=issue.get('description'))}"""
+
             result = await self.agent.ainvoke({
-                "input": FIX_PROMPT.format(issue_description=issue.get('description')),
-                "current_time": datetime.now().isoformat(),
-                "retrieved_context": retrieved_context
+                "input": full_input
             })
 
             # 自动记录成功的修复到知识库

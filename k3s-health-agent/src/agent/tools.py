@@ -75,7 +75,7 @@ class K3sTools:
             Tool(
                 name="get_pod_logs",
                 func=self.get_pod_logs,
-                description="获取指定Pod的日志，用于问题诊断和错误分析。参数: pod_name (str, 必需), namespace (str, 可选, 默认'default'), tail_lines (int, 可选, 默认100)"
+                description="获取指定Pod的日志，用于问题诊断和错误分析。参数: pod_name (str, 必需), namespace (str, 可选, 默认'default'), container (str, 可选, 多容器Pod需要指定), tail_lines (int, 可选, 默认100)"
             ),
             Tool(
                 name="get_node_metrics",
@@ -109,7 +109,7 @@ class K3sTools:
             )
         ]
     
-    def get_cluster_nodes(self) -> str:
+    def get_cluster_nodes(self, _: str = "") -> str:
         """获取集群所有节点状态，包括节点名称、状态、角色、版本、资源容量等信息"""
         try:
             nodes = self.v1.list_node()
@@ -172,19 +172,27 @@ class K3sTools:
             return f"获取Pod状态失败: {str(e)}"
     
     def get_pod_logs(self, pod_name: str, namespace: str = "default", 
-                     tail_lines: int = 100) -> str:
+                     container: str = None, tail_lines: int = 100) -> str:
         """获取指定Pod的日志，用于问题诊断和错误分析"""
         try:
-            logs = self.v1.read_namespaced_pod_log(
-                name=pod_name,
-                namespace=namespace,
-                tail_lines=tail_lines
-            )
+            kwargs = {
+                "name": pod_name,
+                "namespace": namespace,
+                "tail_lines": tail_lines
+            }
+            if container:
+                kwargs["container"] = container
+                
+            logs = self.v1.read_namespaced_pod_log(**kwargs)
             return logs
         except Exception as e:
-            return f"获取Pod日志失败: {str(e)}"
+            error_msg = str(e)
+            # 如果错误提示需要指定容器，提取容器列表
+            if "container name must be specified" in error_msg:
+                return f"获取Pod日志失败: 该Pod有多个容器，{error_msg}"
+            return f"获取Pod日志失败: {error_msg}"
     
-    def get_node_metrics(self) -> str:
+    def get_node_metrics(self, _: str = "") -> str:
         """获取节点的实时资源使用指标（CPU、内存使用率）"""
         try:
             metrics = self.metrics_api.list_cluster_custom_object(
