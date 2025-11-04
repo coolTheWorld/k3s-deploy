@@ -1,5 +1,5 @@
 """AI Agent核心 - 使用 LangGraph API 支持 AI Agents Debugger 可视化"""
-from langchain.agents import create_agent  # ✅ 新版 LangGraph API
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage
 from pydantic import SecretStr
@@ -62,7 +62,7 @@ class K3sHealthAgentRAG:
         else:
             logger.info("RAG engine disabled, running in basic mode")
 
-        # 手动管理聊天历史（替代已弃用的 ConversationBufferMemory）
+        # 手动管理聊天历史
         self.chat_history: List = []
 
         # 创建Agent
@@ -76,8 +76,7 @@ class K3sHealthAgentRAG:
         # 获取工具列表
         tools = self.k3s_tools.get_tools()
 
-        # ✅ 使用新版 LangGraph create_agent API
-        # 这个 API 会返回一个可以在 AI Agents Debugger 中可视化的状态图 Agent
+        # LangGraph create_agent API
         agent = create_agent(
             model=self.llm,
             tools=tools,
@@ -90,7 +89,7 @@ class K3sHealthAgentRAG:
     
     def _log_tool_calls(self, output_messages, history_length):
         """打印工具调用过程的辅助方法"""
-        logger.info("🔧 工具调用过程:")
+        logger.info(" 工具调用过程:")
         tool_call_count = 0
         
         # 跳过历史消息和输入消息，只看新的消息
@@ -106,7 +105,7 @@ class K3sHealthAgentRAG:
                     content_preview = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
                     logger.info(f"  ↳ 工具返回: {content_preview}")
         
-        logger.info(f"📊 总工具调用次数: {tool_call_count}")
+        logger.info(f" 总工具调用次数: {tool_call_count}")
         logger.info("-" * 80)
 
     async def analyze_cluster_health(self) -> dict:
@@ -137,18 +136,18 @@ class K3sHealthAgentRAG:
 {HEALTH_CHECK_PROMPT}"""
                 references = []
 
-            # ✅ LangGraph Agent 使用 messages 格式调用
+
             # 将历史消息和新消息组合成完整的消息列表
             messages = self.chat_history + [HumanMessage(content=full_input)]
             
             # 打印输入
             logger.info("=" * 80)
-            logger.info("🔵 LLM 调用 - 健康检查")
+            logger.info(" LLM 调用 - 健康检查")
             logger.info("=" * 80)
-            logger.info("📋 系统提示 (SYSTEM_PROMPT):")
+            logger.info(" 系统提示 (SYSTEM_PROMPT):")
             logger.info(f"{SYSTEM_PROMPT}")
             logger.info("-" * 80)
-            logger.info(f"📥 用户输入 (HEALTH_CHECK_PROMPT):\n{full_input}")
+            logger.info(f" 用户输入 (HEALTH_CHECK_PROMPT):\n{full_input}")
             logger.info("-" * 80)
             
             result = await self.agent.ainvoke(
@@ -166,7 +165,7 @@ class K3sHealthAgentRAG:
             output = output_messages[-1].content if output_messages else ""
             
             # 打印最终输出
-            logger.info(f"📤 最终输出:\n{output}")
+            logger.info(f" 最终输出:\n{output}")
             logger.info("=" * 80)
 
             # 更新聊天历史
@@ -226,17 +225,17 @@ class K3sHealthAgentRAG:
 
 {DIAGNOSE_PROMPT.format(issue_description=issue_description)}"""
 
-                # ✅ LangGraph Agent 使用 messages 格式调用
+                # LangGraph Agent 使用 messages 格式调用
                 messages = self.chat_history + [HumanMessage(content=full_input)]
                 
                 # 打印输入
                 logger.info("=" * 80)
-                logger.info("🔵 LLM 调用 - 问题诊断 (RAG模式)")
+                logger.info(" LLM 调用 - 问题诊断 (RAG模式)")
                 logger.info("=" * 80)
-                logger.info("📋 系统提示 (SYSTEM_PROMPT):")
+                logger.info(" 系统提示 (SYSTEM_PROMPT):")
                 logger.info(f"{SYSTEM_PROMPT}")
                 logger.info("-" * 80)
-                logger.info(f"📥 用户输入 (含RAG上下文):\n{full_input}")
+                logger.info(f" 用户输入 (含RAG上下文):\n{full_input}")
                 logger.info("-" * 80)
                 
                 result = await self.agent.ainvoke(
@@ -253,7 +252,7 @@ class K3sHealthAgentRAG:
                 output = output_messages[-1].content if output_messages else ""
                 
                 # 打印最终输出
-                logger.info(f"📤 最终输出:\n{output}")
+                logger.info(f" 最终输出:\n{output}")
                 logger.info("=" * 80)
 
                 # 更新聊天历史
@@ -287,17 +286,17 @@ class K3sHealthAgentRAG:
 
 {DIAGNOSE_PROMPT.format(issue_description=issue_description)}"""
 
-                # ✅ LangGraph Agent 使用 messages 格式调用
+                # LangGraph Agent 使用 messages 格式调用
                 messages = self.chat_history + [HumanMessage(content=full_input)]
                 
                 # 打印输入
                 logger.info("=" * 80)
-                logger.info("🔵 LLM 调用 - 问题诊断 (基础模式)")
+                logger.info(" LLM 调用 - 问题诊断 (基础模式)")
                 logger.info("=" * 80)
-                logger.info("📋 系统提示 (SYSTEM_PROMPT):")
+                logger.info(" 系统提示 (SYSTEM_PROMPT):")
                 logger.info(f"{SYSTEM_PROMPT}")
                 logger.info("-" * 80)
-                logger.info(f"📥 用户输入:\n{full_input}")
+                logger.info(f" 用户输入:\n{full_input}")
                 logger.info("-" * 80)
                 
                 result = await self.agent.ainvoke(
@@ -314,7 +313,7 @@ class K3sHealthAgentRAG:
                 output = output_messages[-1].content if output_messages else ""
                 
                 # 打印最终输出
-                logger.info(f"📤 最终输出:\n{output}")
+                logger.info(f" 最终输出:\n{output}")
                 logger.info("=" * 80)
 
                 # 更新聊天历史
@@ -371,17 +370,17 @@ class K3sHealthAgentRAG:
 
 {FIX_PROMPT.format(issue_description=issue.get('description'))}"""
 
-            # ✅ LangGraph Agent 使用 messages 格式调用
+            #LangGraph Agent 使用 messages 格式调用
             messages = self.chat_history + [HumanMessage(content=full_input)]
             
             # 打印输入
             logger.info("=" * 80)
-            logger.info(f"🔵 LLM 调用 - 自动修复 ({'RAG模式' if self.enable_rag else '基础模式'})")
+            logger.info(f" LLM 调用 - 自动修复 ({'RAG模式' if self.enable_rag else '基础模式'})")
             logger.info("=" * 80)
-            logger.info("📋 系统提示 (SYSTEM_PROMPT):")
+            logger.info(" 系统提示 (SYSTEM_PROMPT):")
             logger.info(f"{SYSTEM_PROMPT}")
             logger.info("-" * 80)
-            logger.info(f"📥 用户输入:\n{full_input}")
+            logger.info(f" 用户输入:\n{full_input}")
             logger.info("-" * 80)
             
             result = await self.agent.ainvoke(
@@ -398,7 +397,7 @@ class K3sHealthAgentRAG:
             output = output_messages[-1].content if output_messages else ""
             
             # 打印最终输出
-            logger.info(f"📤 最终输出:\n{output}")
+            logger.info(f" 最终输出:\n{output}")
             logger.info("=" * 80)
 
             # 更新聊天历史
