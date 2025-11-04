@@ -92,8 +92,8 @@ class K3sHealthAgentRAG:
             agent=agent,
             tools=tools,
             verbose=True,
-            max_iterations=100,  # 禁用迭代限制
-            max_execution_time=1200,  # 添加20分钟超时保护
+            max_iterations=20,  # 禁用迭代限制
+            # max_execution_time=1200,  # 添加20分钟超时保护
             handle_parsing_errors=True
         )
 

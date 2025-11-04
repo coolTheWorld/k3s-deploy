@@ -259,6 +259,10 @@ class K3sTools:
     def get_events(self, namespace: str = "default", limit: int = 50) -> str:
         """获取集群事件，包括Warning和Error级别的事件，用于问题追踪"""
         try:
+            # 处理空字符串或只包含空格的namespace参数
+            if not namespace or namespace.strip() == '':
+                namespace = 'default'
+            
             # 如果 namespace 为 'all'，获取所有命名空间的事件
             if namespace.lower() == 'all':
                 events = self.v1.list_event_for_all_namespaces()

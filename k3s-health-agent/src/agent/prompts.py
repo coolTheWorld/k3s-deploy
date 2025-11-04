@@ -26,7 +26,7 @@ SYSTEM_PROMPT = """你是一个专业的Kubernetes/K3s集群运维专家AI Agent
 
 HEALTH_CHECK_PROMPT = """请执行完整的集群健康检查，分为两个阶段：
 
-【第一阶段：数据收集】（限制在 50 次工具调用内）
+【第一阶段：数据收集】（限制在 20 次工具调用内）
 必须收集以下基础信息：
 1. 所有节点的状态和资源使用情况
 2. 所有命名空间的 Pod 运行状态（重点关注非 Running 状态的 Pod）
@@ -35,8 +35,9 @@ HEALTH_CHECK_PROMPT = """请执行完整的集群健康检查，分为两个阶�
 
 ⚠️ 数据收集规则：
 - 优先使用能一次性获取全局信息的工具（如 get_cluster_nodes、get_pod_status with namespace='all' 等）
-- **禁止**逐个 Pod 查看日志，除非该 Pod 有明确的异常状态（CrashLoopBackOff、Error、Pending）
-- 不要深入查看正常运行的 Pod 的日志
+- **严格禁止使用 get_pod_logs 工具**（Pod日志查看属于深入诊断阶段，不在健康检查范围内）
+- 禁止重复查询相同信息
+- 数据收集阶段只使用以下工具：get_cluster_nodes、get_pod_status、get_events、get_node_metrics、get_service_status
 
 【第二阶段：分析报告】（收集完数据后立即生成）
 基于收集到的数据，生成结构化的健康报告，包含：
