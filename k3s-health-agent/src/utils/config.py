@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     """应用配置"""
     
     # OpenAI配置
-    OPENAI_API_KEY: str = "sk-f969bd432bac4ea195ea8bf3485280f0"
+    OPENAI_API_KEY: str = None
     OPENAI_MODEL: str = "qwen-plus"
     EMBEDDING_MODEL: str = "text-embedding-3-large"
     

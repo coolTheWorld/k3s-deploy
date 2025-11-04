@@ -10,7 +10,7 @@ def get_weather(city: str) -> str:
 
 
 model = ChatOpenAI(
-    api_key=SecretStr("sk-f969bd432bac4ea195ea8bf3485280f0"),
+    api_key=SecretStr(""),
     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
     model="qwen-plus",  # Base URL
     temperature=0.7,
