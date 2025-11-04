@@ -1,7 +1,6 @@
-"""AI Agent核心"""
-from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
+"""AI Agent核心 - 使用 LangGraph API 支持 AI Agents Debugger 可视化"""
+from langchain.agents import create_agent  # ✅ 新版 LangGraph API
 from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 from pydantic import SecretStr
 from typing import List
@@ -72,30 +71,43 @@ class K3sHealthAgentRAG:
         logger.info("K3s Health Agent initialized successfully")
 
     def _create_agent(self):
-        """创建RAG增强的Agent"""
-
-        # RAG增强的Prompt模板
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", SYSTEM_PROMPT),
-            MessagesPlaceholder(variable_name="chat_history", optional=True),
-            ("user", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
+        """创建 LangGraph Agent（支持 AI Agents Debugger 可视化）"""
 
         # 获取工具列表
         tools = self.k3s_tools.get_tools()
 
-        # 创建Agent
-        agent = create_openai_tools_agent(self.llm, tools, prompt)
-
-        return AgentExecutor(
-            agent=agent,
+        # ✅ 使用新版 LangGraph create_agent API
+        # 这个 API 会返回一个可以在 AI Agents Debugger 中可视化的状态图 Agent
+        agent = create_agent(
+            model=self.llm,
             tools=tools,
-            verbose=True,
-            max_iterations=20,  # 禁用迭代限制
-            # max_execution_time=1200,  # 添加20分钟超时保护
-            handle_parsing_errors=True
+            system_prompt=SYSTEM_PROMPT,
+            # LangGraph 内部自动管理状态和消息历史
         )
+
+        logger.info(f"Created LangGraph agent with {len(tools)} tools (supports AI Agents Debugger visualization)")
+        return agent
+    
+    def _log_tool_calls(self, output_messages, history_length):
+        """打印工具调用过程的辅助方法"""
+        logger.info("🔧 工具调用过程:")
+        tool_call_count = 0
+        
+        # 跳过历史消息和输入消息，只看新的消息
+        for msg in output_messages[history_length + 1:]:
+            if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                for tool_call in msg.tool_calls:
+                    tool_call_count += 1
+                    logger.info(f"  [{tool_call_count}] 调用工具: {tool_call.get('name', 'unknown')}")
+                    logger.info(f"      参数: {tool_call.get('args', {})}")
+            elif hasattr(msg, 'content') and msg.content and not isinstance(msg, HumanMessage):
+                # 工具返回的结果或 AI 的思考
+                if hasattr(msg, 'name'):  # 工具返回消息
+                    content_preview = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
+                    logger.info(f"  ↳ 工具返回: {content_preview}")
+        
+        logger.info(f"📊 总工具调用次数: {tool_call_count}")
+        logger.info("-" * 80)
 
     async def analyze_cluster_health(self) -> dict:
         """集群健康检查（可选RAG增强）"""
@@ -125,18 +137,45 @@ class K3sHealthAgentRAG:
 {HEALTH_CHECK_PROMPT}"""
                 references = []
 
-            result = await self.agent.ainvoke({
-                "input": full_input,
-                "chat_history": self.chat_history
-            })
+            # ✅ LangGraph Agent 使用 messages 格式调用
+            # 将历史消息和新消息组合成完整的消息列表
+            messages = self.chat_history + [HumanMessage(content=full_input)]
+            
+            # 打印输入
+            logger.info("=" * 80)
+            logger.info("🔵 LLM 调用 - 健康检查")
+            logger.info("=" * 80)
+            logger.info("📋 系统提示 (SYSTEM_PROMPT):")
+            logger.info(f"{SYSTEM_PROMPT}")
+            logger.info("-" * 80)
+            logger.info(f"📥 用户输入 (HEALTH_CHECK_PROMPT):\n{full_input}")
+            logger.info("-" * 80)
+            
+            result = await self.agent.ainvoke(
+                {"messages": messages},
+                config={"recursion_limit": 50}  # 增加递归限制，防止过早停止
+            )
+
+            # 提取 LangGraph 返回的所有消息
+            output_messages = result.get("messages", [])
+            
+            # 打印工具调用过程
+            self._log_tool_calls(output_messages, len(self.chat_history))
+            
+            # 提取最终输出
+            output = output_messages[-1].content if output_messages else ""
+            
+            # 打印最终输出
+            logger.info(f"📤 最终输出:\n{output}")
+            logger.info("=" * 80)
 
             # 更新聊天历史
             self.chat_history.append(HumanMessage(content=full_input))
-            self.chat_history.append(AIMessage(content=result["output"]))
+            self.chat_history.append(AIMessage(content=output))
 
             return {
                 "status": "success",
-                "analysis": result["output"],
+                "analysis": output,
                 "timestamp": datetime.now().isoformat(),
                 "references": references,
                 "rag_enabled": self.enable_rag
@@ -187,18 +226,43 @@ class K3sHealthAgentRAG:
 
 {DIAGNOSE_PROMPT.format(issue_description=issue_description)}"""
 
-                result = await self.agent.ainvoke({
-                    "input": full_input,
-                    "chat_history": self.chat_history
-                })
+                # ✅ LangGraph Agent 使用 messages 格式调用
+                messages = self.chat_history + [HumanMessage(content=full_input)]
+                
+                # 打印输入
+                logger.info("=" * 80)
+                logger.info("🔵 LLM 调用 - 问题诊断 (RAG模式)")
+                logger.info("=" * 80)
+                logger.info("📋 系统提示 (SYSTEM_PROMPT):")
+                logger.info(f"{SYSTEM_PROMPT}")
+                logger.info("-" * 80)
+                logger.info(f"📥 用户输入 (含RAG上下文):\n{full_input}")
+                logger.info("-" * 80)
+                
+                result = await self.agent.ainvoke(
+                    {"messages": messages},
+                    config={"recursion_limit": 50}  # 增加递归限制
+                )
+
+                # 提取输出
+                output_messages = result.get("messages", [])
+                
+                # 打印工具调用过程
+                self._log_tool_calls(output_messages, len(self.chat_history))
+                
+                output = output_messages[-1].content if output_messages else ""
+                
+                # 打印最终输出
+                logger.info(f"📤 最终输出:\n{output}")
+                logger.info("=" * 80)
 
                 # 更新聊天历史
                 self.chat_history.append(HumanMessage(content=full_input))
-                self.chat_history.append(AIMessage(content=result["output"]))
+                self.chat_history.append(AIMessage(content=output))
 
                 return {
                     "status": "success",
-                    "diagnosis": result["output"],
+                    "diagnosis": output,
                     "timestamp": datetime.now().isoformat(),
                     "similar_incidents": [
                         {
@@ -223,18 +287,43 @@ class K3sHealthAgentRAG:
 
 {DIAGNOSE_PROMPT.format(issue_description=issue_description)}"""
 
-                result = await self.agent.ainvoke({
-                    "input": full_input,
-                    "chat_history": self.chat_history
-                })
+                # ✅ LangGraph Agent 使用 messages 格式调用
+                messages = self.chat_history + [HumanMessage(content=full_input)]
+                
+                # 打印输入
+                logger.info("=" * 80)
+                logger.info("🔵 LLM 调用 - 问题诊断 (基础模式)")
+                logger.info("=" * 80)
+                logger.info("📋 系统提示 (SYSTEM_PROMPT):")
+                logger.info(f"{SYSTEM_PROMPT}")
+                logger.info("-" * 80)
+                logger.info(f"📥 用户输入:\n{full_input}")
+                logger.info("-" * 80)
+                
+                result = await self.agent.ainvoke(
+                    {"messages": messages},
+                    config={"recursion_limit": 50}  # 增加递归限制
+                )
+
+                # 提取输出
+                output_messages = result.get("messages", [])
+                
+                # 打印工具调用过程
+                self._log_tool_calls(output_messages, len(self.chat_history))
+                
+                output = output_messages[-1].content if output_messages else ""
+                
+                # 打印最终输出
+                logger.info(f"📤 最终输出:\n{output}")
+                logger.info("=" * 80)
 
                 # 更新聊天历史
                 self.chat_history.append(HumanMessage(content=full_input))
-                self.chat_history.append(AIMessage(content=result["output"]))
+                self.chat_history.append(AIMessage(content=output))
 
                 return {
                     "status": "success",
-                    "diagnosis": result["output"],
+                    "diagnosis": output,
                     "timestamp": datetime.now().isoformat(),
                     "similar_incidents": [],
                     "related_solutions": [],
@@ -282,14 +371,39 @@ class K3sHealthAgentRAG:
 
 {FIX_PROMPT.format(issue_description=issue.get('description'))}"""
 
-            result = await self.agent.ainvoke({
-                "input": full_input,
-                "chat_history": self.chat_history
-            })
+            # ✅ LangGraph Agent 使用 messages 格式调用
+            messages = self.chat_history + [HumanMessage(content=full_input)]
+            
+            # 打印输入
+            logger.info("=" * 80)
+            logger.info(f"🔵 LLM 调用 - 自动修复 ({'RAG模式' if self.enable_rag else '基础模式'})")
+            logger.info("=" * 80)
+            logger.info("📋 系统提示 (SYSTEM_PROMPT):")
+            logger.info(f"{SYSTEM_PROMPT}")
+            logger.info("-" * 80)
+            logger.info(f"📥 用户输入:\n{full_input}")
+            logger.info("-" * 80)
+            
+            result = await self.agent.ainvoke(
+                {"messages": messages},
+                config={"recursion_limit": 50}  # 增加递归限制
+            )
+
+            # 提取输出
+            output_messages = result.get("messages", [])
+            
+            # 打印工具调用过程
+            self._log_tool_calls(output_messages, len(self.chat_history))
+            
+            output = output_messages[-1].content if output_messages else ""
+            
+            # 打印最终输出
+            logger.info(f"📤 最终输出:\n{output}")
+            logger.info("=" * 80)
 
             # 更新聊天历史
             self.chat_history.append(HumanMessage(content=full_input))
-            self.chat_history.append(AIMessage(content=result["output"]))
+            self.chat_history.append(AIMessage(content=output))
 
             # 自动记录成功的修复到知识库（仅在 RAG 启用时）
             if self.enable_rag and result.get("status") == "success":
@@ -297,7 +411,7 @@ class K3sHealthAgentRAG:
 
             return {
                 "status": "success",
-                "fix_result": result["output"],
+                "fix_result": output,
                 "timestamp": datetime.now().isoformat(),
                 "rag_enabled": self.enable_rag
             }
